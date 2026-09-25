@@ -1,0 +1,37 @@
+.demo-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 15%, rgba(110, 84, 53, .22), transparent 42%), #171411;
+}
+
+.demo-auth-card {
+  width: min(440px, 100%);
+  padding: 40px;
+  border: 1px solid #655543;
+  background: #211d19;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .42);
+}
+
+.demo-auth-card h1 {
+  margin: 10px 0 12px;
+  color: #faf7f1;
+  font: 400 42px/1.15 'Libre Baskerville', Georgia, serif;
+  letter-spacing: -.055em;
+}
+
+.demo-auth-card > p { margin-bottom: 26px; }
+.demo-auth-card .field { margin-bottom: 18px; }
+.demo-auth-card .btn { width: 100%; }
+.demo-auth-error { min-height: 24px; color: #efa79d; font-size: 13px; }
+.demo-auth-note { margin-top: 20px !important; padding-left: 12px; border-left: 2px solid #c39a60; font-size: 12px; }
+.demo-user-badge { display: inline-flex; align-items: center; gap: 12px; color: #bdb5a8; font-size: 11px; }
+.demo-user-badge button { border: 0; background: none; color: #d8b277; padding: 0; font: inherit; }
+
+@media (max-width: 480px) {
+  .demo-auth-card { padding: 30px 24px; }
+  .demo-auth-card h1 { font-size: 34px; }
+}
