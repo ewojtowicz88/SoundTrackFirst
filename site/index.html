@@ -25,12 +25,13 @@
     <script type="module">
       const rootPath = "/SoundTrackFirst/";
       const isRoot = window.location.pathname === rootPath || window.location.pathname === rootPath.slice(0, -1);
-      if (isRoot) window.history.replaceState(null, "", `${rootPath}home-full`);
+      const replaceUrl = window.history.replaceState.bind(window.history);
+      if (isRoot) replaceUrl(null, "", `${rootPath}home-full`);
       await import("/SoundTrackFirst/assets/index-github-pages.js");
       if (isRoot) {
         await new Promise(window.requestAnimationFrame);
         await new Promise(window.requestAnimationFrame);
-        window.history.replaceState(null, "", rootPath);
+        replaceUrl(null, "", rootPath);
       }
     </script>
     <link rel="modulepreload" crossorigin href="/SoundTrackFirst/assets/query-BdZSQXJV.js">
