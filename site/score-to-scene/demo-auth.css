@@ -1,7 +1,6 @@
 .demo-auth-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
+  position: relative;
+  min-height: calc(100vh - 4.5rem);
   display: grid;
   place-items: center;
   padding: 24px;

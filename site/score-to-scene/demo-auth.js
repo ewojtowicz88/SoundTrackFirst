@@ -19,7 +19,7 @@
 
   function showApp(username) {
     document.querySelector('.demo-auth-overlay')?.remove();
-    const top = document.querySelector('.top');
+    const top = document.querySelector('header nav[aria-label="Main navigation"]');
     if (top && !top.querySelector('.demo-user-badge')) {
       const badge = document.createElement('span');
       badge.className = 'demo-user-badge';
@@ -55,7 +55,7 @@
         <button class="btn" type="submit">Sign in</button>
         <p class="demo-auth-note">Demo only. These shared demonstration accounts are not private.</p>
       </form>`;
-    document.body.appendChild(overlay);
+    (document.querySelector('main.layout') || document.body).prepend(overlay);
 
     overlay.querySelector('form').addEventListener('submit', event => {
       event.preventDefault();
