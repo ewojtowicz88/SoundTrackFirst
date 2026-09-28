@@ -2,29 +2,202 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171411">
   <meta name="robots" content="noindex, nofollow">
-  <title>Soundtrack First Prototype</title>
+  <title>Create · Soundtrack First</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="/SoundTrackFirst/" aria-label="Soundtrack First homepage">
-      <img src="/SoundTrackFirst/airo-assets/images/logo/horizontal/dark" alt="Soundtrack First" width="240" height="96">
-    </a>
-    <span>Prototype</span>
-  </header>
-  <main>
-    <p class="eyebrow">Soundtrack First · New site</p>
-    <h1>The music plays before the story begins.</h1>
-    <p class="intro">This is the isolated workspace for the next version of Soundtrack First. It carries forward the established brand, color palette, and visual voice while the new experience takes shape.</p>
-  </main>
-  <footer>
-    <img src="/SoundTrackFirst/airo-assets/images/logo/horizontal/dark" alt="Soundtrack First" width="240" height="96">
-    <p>Creative story telling scored first.</p>
-  </footer>
+  <div class="app-shell">
+    <header class="app-header">
+      <a href="./" class="wordmark" aria-label="Soundtrack First home"><img src="assets/soundtrack-first-logo.png" alt="Soundtrack First"></a>
+      <div class="profile-control">
+        <button class="profile-button" id="profile-button" type="button" aria-label="Sign in" aria-haspopup="menu" aria-expanded="false">Sign in</button>
+        <div class="profile-menu" id="profile-menu" role="menu" hidden>
+          <p id="profile-menu-name"></p>
+          <button id="view-profile-button" type="button" role="menuitem">View profile</button>
+          <button id="logout-button" type="button" role="menuitem">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-content">
+      <section class="create-screen" id="create-screen">
+        <p class="eyebrow">Begin a new creation</p>
+        <h1>Let's Create &amp; Collaborate</h1>
+        <p class="intro">Choose a format. Bring the people, stories, and music that belong together.</p>
+
+        <div class="creation-options" aria-label="Creation formats">
+          <button class="creation-card bookclub" type="button" data-format="Bookclub">
+            <span class="type-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c3.2-.6 5.7.1 8.5 2.2v11c-2.8-2.1-5.3-2.8-8.5-2.2v-11Zm17 0c-3.2-.6-5.7.1-8.5 2.2v11c2.8-2.1 5.3-2.8 8.5-2.2v-11Z"/></svg></span>
+            <span class="card-copy">
+              <strong>Bookclub</strong>
+              <small>Read together. Capture the conversation.</small>
+            </span>
+            <span class="arrow" aria-hidden="true">›</span>
+          </button>
+
+          <button class="creation-card memory" type="button" data-format="Memory Box">
+            <span class="type-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5 12 4l8 4.5-8 4.5-8-4.5Zm0 0V17l8 4 8-4V8.5M12 13v8"/></svg></span>
+            <span class="card-copy">
+              <strong>Memory Box</strong>
+              <small>Build a shared collection of moments and music.</small>
+            </span>
+            <span class="arrow" aria-hidden="true">›</span>
+          </button>
+
+          <button class="creation-card score" type="button" data-format="Score to Scene">
+            <span class="type-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v13h-17zM3.5 9h17M7 5.5v3.5m10-3.5v3.5M9 15.7a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3l5-1v4.2a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3"/></svg></span>
+            <span class="card-copy">
+              <strong>Score to Scene</strong>
+              <small>Turn a playlist into a sequence of scenes.</small>
+            </span>
+            <span class="arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
+
+        <div id="continue-section" hidden>
+          <section class="recent-section">
+            <div>
+              <p class="section-label">Your library</p>
+              <h2>Continue creating</h2>
+            </div>
+            <button class="text-button" type="button">View all</button>
+          </section>
+          <div id="creation-list"></div>
+        </div>
+      </section>
+
+      <section class="setup-screen" id="setup-screen" hidden>
+        <button class="back-button" id="back-button" type="button">← Back</button>
+        <p class="eyebrow">New creation</p>
+        <div class="selected-heading">
+          <span class="type-badge" id="selected-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v13h-17zM3.5 9h17M7 5.5v3.5m10-3.5v3.5M9 15.7a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3l5-1v4.2a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3"/></svg></span>
+          <h1 id="selected-format">Score to Scene</h1>
+        </div>
+        <p class="intro" id="selected-description"></p>
+        <div class="source-step">
+          <label for="source-url" id="source-label">Audible book link</label>
+          <input id="source-url" type="url" placeholder="https://www.audible.com/pd/…" inputmode="url">
+          <p class="field-help" id="source-help">Paste the Audible page for the book you want the club to read.</p>
+          <button class="primary-button" id="lookup-source" type="button">Find this book</button>
+          <p class="form-message" id="form-message" role="alert"></p>
+        </div>
+
+        <article class="metadata-preview" id="metadata-preview" hidden>
+          <div class="book-cover" id="source-art" aria-hidden="true">A</div>
+          <div>
+            <p class="preview-label" id="preview-label">Audible book</p>
+            <h2 id="preview-title">Book details found</h2>
+            <p id="preview-byline">Author · Narrator</p>
+            <small id="preview-meta">Runtime and release details</small>
+          </div>
+        </article>
+
+        <div class="name-step" id="name-step" hidden>
+          <label for="creation-name">Name your creation</label>
+          <input id="creation-name" type="text" placeholder="Give it a memorable name">
+          <button class="primary-button" id="create-item" type="button">Create Bookclub</button>
+        </div>
+      </section>
+
+      <section class="project-screen" id="project-screen" hidden>
+        <button class="back-button" id="library-button" type="button">← Library</button>
+        <div class="project-identity">
+          <img id="project-cover" alt="" hidden>
+          <div>
+            <p class="eyebrow">Score to Scene</p>
+            <div class="project-title-row"><h1 id="project-title"></h1><button id="edit-project-title" type="button" aria-label="Edit creation title">✎</button></div>
+            <div class="project-title-editor" id="project-title-editor" hidden>
+              <input id="project-title-input" type="text" aria-label="Creation title">
+              <button id="save-project-title" type="button">Save</button>
+              <button id="cancel-project-title" type="button">Cancel</button>
+            </div>
+            <p class="project-playlist" id="project-playlist"></p>
+          </div>
+        </div>
+        <div class="playlist-details">
+          <p class="playlist-credit"><img id="project-owner-image" alt="" hidden><span>Spotify playlist</span><span aria-hidden="true">·</span><a id="project-owner" target="_blank" rel="noopener"></a></p>
+          <p class="playlist-description" id="project-description"></p>
+        </div>
+        <section class="collaboration-panel">
+          <div class="collaboration-heading"><div><p class="section-label">Collaboration</p><h2>Work on this together</h2></div><button id="invite-collaborator-button" type="button">Invite collaborators</button></div>
+          <div class="invite-finder" id="invite-finder" hidden>
+            <label for="collaborator-search">Find registered users by email</label>
+            <input id="collaborator-search" type="email" inputmode="email" autocomplete="off" placeholder="Start typing an email address">
+            <div class="user-options" id="collaborator-options"></div>
+            <p class="form-message" id="collaborator-message" role="status"></p>
+          </div>
+          <div class="collaborator-list" id="collaborator-list"></div>
+        </section>
+        <div class="project-summary" id="project-summary"></div>
+        <div class="scene-list" id="scene-list"></div>
+        <button class="danger-button project-delete" id="delete-project-button" type="button">Delete creation</button>
+      </section>
+
+      <section class="profile-screen" id="profile-screen" hidden>
+        <button class="back-button" id="profile-back-button" type="button">← Back</button>
+        <p class="eyebrow">Your account</p>
+        <div class="profile-identity">
+          <span class="profile-avatar" id="profile-avatar" aria-hidden="true"></span>
+          <div>
+            <h1 id="profile-display-name"></h1>
+            <p id="profile-username"></p>
+          </div>
+        </div>
+        <div class="profile-stats" id="profile-stats"></div>
+        <button class="secondary-button profile-logout" id="profile-logout-button" type="button">Log out</button>
+      </section>
+
+      <section class="library-screen" id="library-screen" hidden>
+        <p class="eyebrow">Your collection</p>
+        <h1>Library</h1>
+        <p class="intro">Open a creation to keep working, or start something new.</p>
+        <div class="library-list" id="library-list"></div>
+        <div class="library-empty" id="library-empty" hidden>
+          <p>You haven’t created anything yet.</p>
+          <button class="primary-button" id="library-create-button" type="button">Create something</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="App navigation">
+      <button id="nav-library-button" type="button"><span aria-hidden="true">♫</span><small>Library</small></button>
+      <button class="active" id="nav-create-button" type="button"><span aria-hidden="true">＋</span><small>Create</small></button>
+      <button id="nav-profile-button" type="button"><span aria-hidden="true">○</span><small>Profile</small></button>
+    </nav>
+  </div>
+
+  <dialog class="auth-dialog" id="auth-dialog">
+    <div class="auth-sheet">
+      <button class="dialog-close" id="dialog-close" type="button" aria-label="Close sign in">×</button>
+      <p class="eyebrow">Soundtrack First</p>
+      <h2 id="auth-heading">Continue your creation</h2>
+      <p class="auth-intro">Log in or create an account to save your work and return to it later.</p>
+      <div class="auth-tabs" role="tablist" aria-label="Account options">
+        <button class="active" id="login-tab" type="button" role="tab" aria-selected="true">Log in</button>
+        <button id="create-tab" type="button" role="tab" aria-selected="false">Create account</button>
+      </div>
+      <form id="auth-form">
+        <div class="auth-name" id="auth-name" hidden>
+          <label for="display-name">Your name</label>
+          <input id="display-name" type="text" autocomplete="name" placeholder="How should we address you?">
+        </div>
+        <label for="username">Email address</label>
+        <input id="username" type="email" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="you@example.com" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Enter your password" required minlength="6">
+        <p class="auth-error" id="auth-error" role="alert"></p>
+        <button class="primary-button" id="auth-submit" type="submit">Log in and continue</button>
+      </form>
+    </div>
+  </dialog>
+  <div class="track-player" id="track-player" hidden><button id="close-player" type="button" aria-label="Close player">×</button><div id="track-frame" aria-label="Spotify track player"></div></div>
+  <script src="app.js"></script>
+  <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 </body>
 </html>
