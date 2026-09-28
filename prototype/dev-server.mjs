@@ -5,7 +5,7 @@ import { extname, join, normalize } from 'node:path';
 const port = 4174;
 const root = new URL('.', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
 const prefix = '/SoundTrackFirst/prototype/';
-const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 function firstSource(container) {
   return container?.sources?.find(source => source?.url)?.url || '';

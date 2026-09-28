@@ -1,0 +1,19 @@
+{
+  "name": "Soundtrack First",
+  "short_name": "Soundtrack",
+  "description": "Create and collaborate on Bookclubs, Memory Boxes, and Score to Scene projects.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171411",
+  "theme_color": "#171411",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/soundtrack-first-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

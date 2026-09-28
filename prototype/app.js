@@ -898,3 +898,7 @@ document.querySelector('#collaborator-search').addEventListener('input', event =
 });
 
 updateProfileButton();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
