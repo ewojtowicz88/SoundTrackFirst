@@ -72,6 +72,7 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .card-delete { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #a99d90; font-size: 16px; }
 .card-delete:hover, .card-delete:focus-visible { background: #482a26; color: #ffb4aa; }
 .bottom-nav { position: fixed; z-index: 12; left: 50%; bottom: 0; width: min(100%, 460px); min-height: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px 12px env(safe-area-inset-bottom); border-top: 1px solid #3b332b; background: #171411f2; backdrop-filter: blur(15px); }
+.bottom-nav .app-version { position: absolute; right: 10px; top: -24px; padding: 4px 7px; border: 1px solid #40372f; border-radius: 999px; background: #171411e8; color: #aaa196; font-size: 9px; line-height: 1; letter-spacing: .06em; box-shadow: 0 4px 12px #0005; }
 .bottom-nav button { display: grid; place-items: center; align-content: center; gap: 3px; border: 0; background: none; color: #837a71; }
 .bottom-nav span { font-size: 21px; line-height: 1; }
 .bottom-nav small { font-size: 10px; }

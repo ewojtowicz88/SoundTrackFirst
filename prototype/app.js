@@ -28,6 +28,12 @@ const formats = {
   }
 };
 
+const appVersion = globalThis.SOUNDTRACKFIRST_VERSION || '0.0.0';
+const versionLabel = document.querySelector('.app-version');
+versionLabel.textContent = `v${appVersion}`;
+versionLabel.setAttribute('aria-label', `Application version ${appVersion}`);
+document.querySelector('meta[name="application-version"]').content = appVersion;
+
 const prototypeRoot = new URL('.', document.currentScript?.src || window.location.href);
 
 const createScreen = document.querySelector('#create-screen');
@@ -324,9 +330,18 @@ function spotifyPlaylistId(value) {
 async function importPlaylist(sourceValue) {
   const playlistId = spotifyPlaylistId(sourceValue);
   if (!playlistId) throw new Error('Invalid Spotify playlist link');
-  const response = await fetch(new URL(`api/playlist/${playlistId}`, prototypeRoot));
-  if (!response.ok) throw new Error('Playlist lookup failed');
-  const playlist = await response.json();
+  let playlist = null;
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    try {
+      const response = await fetch(new URL(`api/playlist/${playlistId}`, prototypeRoot));
+      if (response.ok) playlist = await response.json();
+    } catch { /* Use the hosted importer below. */ }
+  }
+  if (!playlist) {
+    const { data, error } = await supabaseClient.functions.invoke('spotify-playlist', { body: { playlistId } });
+    if (error) throw error;
+    playlist = data;
+  }
   if (!playlist.songs?.length) throw new Error('No public tracks were found in this playlist');
   return playlist;
 }
