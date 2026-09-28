@@ -28,6 +28,8 @@ const formats = {
   }
 };
 
+const prototypeRoot = new URL('.', document.currentScript?.src || window.location.href);
+
 const createScreen = document.querySelector('#create-screen');
 const setupScreen = document.querySelector('#setup-screen');
 const projectScreen = document.querySelector('#project-screen');
@@ -121,9 +123,9 @@ async function demoApi(path, options = {}, passwordOverride = null) {
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const password = passwordOverride ?? session?.password;
   if (password) headers.set('X-Demo-Password', password);
-  const response = await fetch(`api/${path}`, { ...options, headers });
+  const response = await fetch(new URL(`api/${path}`, prototypeRoot), { ...options, headers });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Unable to complete that request.');
+  if (!response.ok) throw new Error(data.error || `Unable to complete that request (${response.status}).`);
   return data;
 }
 
@@ -279,7 +281,7 @@ function spotifyPlaylistId(value) {
 async function importPlaylist(sourceValue) {
   const playlistId = spotifyPlaylistId(sourceValue);
   if (!playlistId) throw new Error('Invalid Spotify playlist link');
-  const response = await fetch(`api/playlist/${playlistId}`);
+  const response = await fetch(new URL(`api/playlist/${playlistId}`, prototypeRoot));
   if (!response.ok) throw new Error('Playlist lookup failed');
   const playlist = await response.json();
   if (!playlist.songs?.length) throw new Error('No public tracks were found in this playlist');
