@@ -1,0 +1,12 @@
+{
+  "name": "soundtrack-first-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node prototype/dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

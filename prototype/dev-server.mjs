@@ -2,11 +2,12 @@ import { createServer } from 'node:http';
 import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const port = 4174;
+const port = Number(process.env.PORT || 4174);
+const host = process.env.HOST || '0.0.0.0';
 const root = new URL('.', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
 const prefix = '/SoundTrackFirst/prototype/';
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const dataDirectory = join(root, 'backend-data');
+const dataDirectory = process.env.DATA_DIR || join(root, 'backend-data');
 const usersFile = join(dataDirectory, 'users.json');
 const projectsFile = join(dataDirectory, 'projects.json');
 
@@ -122,6 +123,12 @@ async function readSpotifyPlaylist(playlistId) {
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
+    if (url.pathname === '/health') return json(response, 200, { status: 'ok' });
+    if (url.pathname === '/') {
+      response.writeHead(302, { Location: prefix });
+      response.end();
+      return;
+    }
     if (url.pathname === `${prefix}api/auth/register` && request.method === 'POST') {
       const body = await readBody(request);
       const email = String(body.email || '').trim().toLowerCase();
@@ -185,4 +192,4 @@ createServer(async (request, response) => {
     response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('Not found');
   }
-}).listen(port, '127.0.0.1', () => console.log(`Prototype running at http://localhost:${port}${prefix}`));
+}).listen(port, host, () => console.log(`Prototype running on ${host}:${port}${prefix}`));

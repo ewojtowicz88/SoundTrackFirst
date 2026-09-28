@@ -18,7 +18,7 @@ const formats = {
     lookupLabel: 'Find this playlist'
   },
   'Score to Scene': {
-    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v13h-17zM3.5 9h17M7 5.5v3.5m10-3.5v3.5M9 15.7a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3l5-1v4.2a1.7 1.7 0 1 1-1.7-1.7c.6 0 1.1.2 1.7.5v-3"/></svg>',
+    icon: '<img src="assets/score-to-scene-icon.png" alt="">',
     className: 'score',
     description: 'Start with a Spotify playlist, then write the scene that belongs to every track.',
     sourceLabel: 'Spotify playlist link',
@@ -105,8 +105,14 @@ const authForm = document.querySelector('#auth-form');
 const loginTab = document.querySelector('#login-tab');
 const createTab = document.querySelector('#create-tab');
 
+const supabaseClient = supabase.createClient(
+  'https://yjawkdddxcwwvipdjddy.supabase.co',
+  'sb_publishable_fwdFBHZCOg8UZKcmpwR7xQ_GH6ELFtJ'
+);
+let currentSession = null;
+
 function getSession() {
-  try { return JSON.parse(localStorage.getItem('sfPrototypeSession')); } catch { return null; }
+  return currentSession;
 }
 
 function getUsers() {
@@ -117,23 +123,60 @@ function getProjects() {
   try { return JSON.parse(localStorage.getItem('sfPrototypeProjects')) || {}; } catch { return {}; }
 }
 
-async function demoApi(path, options = {}, passwordOverride = null) {
-  const session = getSession();
-  const headers = new Headers(options.headers || {});
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const password = passwordOverride ?? session?.password;
-  if (password) headers.set('X-Demo-Password', password);
-  const response = await fetch(new URL(`api/${path}`, prototypeRoot), { ...options, headers });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Unable to complete that request (${response.status}).`);
-  return data;
+function sessionFromUser(user) {
+  if (!user) return null;
+  const username = user.email.toLowerCase();
+  return {
+    userId: user.id,
+    username,
+    displayName: user.user_metadata?.display_name || getUsers()[username]?.displayName || username.split('@')[0]
+  };
+}
+
+async function loadProfiles() {
+  const { data, error } = await supabaseClient.from('profiles').select('email, display_name');
+  if (error) throw error;
+  const users = {};
+  for (const profile of data || []) users[profile.email.toLowerCase()] = { displayName: profile.display_name };
+  localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
 }
 
 async function loadRemoteProjects(session) {
-  const data = await demoApi(`projects?email=${encodeURIComponent(session.username)}`);
   const projects = getProjects();
-  projects[session.username] = data.projects || [];
+  const cached = projects[session.username] || [];
+  let { data, error } = await supabaseClient.from('projects').select('data, collaborator_emails').order('updated_at', { ascending: false });
+  if (error) throw error;
+  if (!data?.length && cached.length) {
+    for (const project of cached.filter(item => item.ownerEmail === session.username)) await saveRemoteProject(project);
+    ({ data, error } = await supabaseClient.from('projects').select('data, collaborator_emails').order('updated_at', { ascending: false }));
+    if (error) throw error;
+  }
+  projects[session.username] = (data || []).map(row => ({
+    ...row.data,
+    collaborators: row.collaborator_emails || row.data.collaborators || []
+  }));
   localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+}
+
+async function saveRemoteProject(project) {
+  const session = getSession();
+  if (!session) return;
+  const data = JSON.parse(JSON.stringify(project));
+  if (project.ownerEmail === session.username) {
+    const { error } = await supabaseClient.from('projects').upsert({
+      id: project.id,
+      owner_id: session.userId,
+      owner_email: project.ownerEmail,
+      collaborator_emails: project.collaborators || [],
+      data,
+      created_at: project.createdAt || new Date().toISOString(),
+      updated_at: project.updatedAt || new Date().toISOString()
+    });
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabaseClient.from('projects').update({ data, updated_at: project.updatedAt || new Date().toISOString() }).eq('id', project.id);
+  if (error) throw error;
 }
 
 function syncProject(project) {
@@ -147,8 +190,7 @@ function syncProject(project) {
     else projects[email].unshift(copy);
   }
   localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
-  const session = getSession();
-  if (session) demoApi('projects', { method: 'PUT', body: JSON.stringify({ ...project, requestingEmail: session.username }) }).catch(() => {});
+  if (getSession()) saveRemoteProject(project).catch(error => console.warn('Creation could not be synced.', error));
 }
 
 function renderProjects() {
@@ -163,13 +205,14 @@ function renderProjects() {
   }
 }
 
-function deleteProject(project) {
+async function deleteProject(project) {
   const session = getSession();
   if (!session || project.ownerEmail !== session.username || !window.confirm(`Delete “${project.name}”? This cannot be undone.`)) return false;
   const projects = getProjects();
   for (const email of Object.keys(projects)) projects[email] = (projects[email] || []).filter(item => item.id !== project.id);
   localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
-  demoApi(`projects/${encodeURIComponent(project.id)}?email=${encodeURIComponent(session.username)}`, { method: 'DELETE' }).catch(() => {});
+  const { error } = await supabaseClient.from('projects').delete().eq('id', project.id);
+  if (error) throw error;
   renderProjects();
   return true;
 }
@@ -438,11 +481,12 @@ function inviteCollaborator(email) {
     : `Invitation saved for ${normalized}. It will appear when they create an account with that email.`;
 }
 
-function renderCollaboratorOptions(query) {
+async function renderCollaboratorOptions(query) {
   const options = document.querySelector('#collaborator-options');
   options.replaceChildren();
   const normalized = query.trim().toLowerCase();
   if (normalized.length < 2 || !activeProject) return;
+  try { await loadProfiles(); } catch { /* Use the most recent local profile cache. */ }
   const users = getUsers();
   const session = getSession();
   const matches = Object.entries(users).filter(([email]) =>
@@ -641,8 +685,9 @@ function showProfile() {
   setActiveNav('profile');
 }
 
-function logout() {
-  localStorage.removeItem('sfPrototypeSession');
+async function logout() {
+  await supabaseClient.auth.signOut();
+  currentSession = null;
   pendingFormat = null;
   closeProfileMenu();
   setupScreen.hidden = true;
@@ -753,17 +798,17 @@ authForm.addEventListener('submit', async event => {
   error.textContent = '';
   try {
     const displayName = document.querySelector('#display-name').value.trim();
-    const result = await demoApi(
-      authMode === 'create' ? 'auth/register' : 'auth/login',
-      { method: 'POST', body: JSON.stringify({ email: username, password, displayName }) },
-      password
-    );
+    const { data, error: authError } = authMode === 'create'
+      ? await supabaseClient.auth.signUp({ email: username, password, options: { data: { display_name: displayName } } })
+      : await supabaseClient.auth.signInWithPassword({ email: username, password });
+    if (authError) throw authError;
+    if (!data.user || !data.session) throw new Error('Check your email to confirm this account before signing in.');
     const users = getUsers();
-    users[username] = { displayName: result.displayName };
+    const resolvedName = data.user.user_metadata?.display_name || displayName || users[username]?.displayName || username.split('@')[0];
+    users[username] = { displayName: resolvedName };
     localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
-    const session = { username: result.email, displayName: result.displayName, password };
-    localStorage.setItem('sfPrototypeSession', JSON.stringify(session));
-    await loadRemoteProjects(session);
+    currentSession = sessionFromUser(data.user);
+    await Promise.all([loadRemoteProjects(currentSession), loadProfiles()]);
     updateProfileButton();
     authDialog.close();
     if (pendingFormat) {
@@ -893,10 +938,15 @@ document.querySelector('#close-player').addEventListener('click', () => {
   spotifyEmbedController?.pause();
 });
 
-document.querySelector('#delete-project-button').addEventListener('click', () => {
-  if (activeProject && deleteProject(activeProject)) {
-    activeProject = null;
-    showLibrary();
+document.querySelector('#delete-project-button').addEventListener('click', async () => {
+  if (!activeProject) return;
+  try {
+    if (await deleteProject(activeProject)) {
+      activeProject = null;
+      showLibrary();
+    }
+  } catch (error) {
+    window.alert(error.message || 'This creation could not be deleted.');
   }
 });
 
@@ -926,7 +976,21 @@ document.querySelector('#collaborator-search').addEventListener('input', event =
   renderCollaboratorOptions(event.target.value);
 });
 
-updateProfileButton();
+async function initializeAccount() {
+  const { data } = await supabaseClient.auth.getSession();
+  currentSession = sessionFromUser(data.session?.user);
+  if (currentSession) {
+    try { await Promise.all([loadRemoteProjects(currentSession), loadProfiles()]); }
+    catch (error) { console.warn('Saved creations could not be loaded.', error); }
+  }
+  updateProfileButton();
+}
+
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  currentSession = sessionFromUser(session?.user);
+});
+
+initializeAccount();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

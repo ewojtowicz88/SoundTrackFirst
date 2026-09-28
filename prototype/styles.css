@@ -49,10 +49,12 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .creation-card:hover, .creation-card:active { transform: translateY(-2px); border-color: var(--gold); background: #2b241d; }
 .type-badge, .recent-badge { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; font: 400 19px/1 "Libre Baskerville", Georgia, serif; }
 .type-badge svg, .recent-badge svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.type-badge img, .recent-badge img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .recent-badge svg { width: 18px; height: 18px; }
 .bookclub .type-badge { border: 1px solid var(--gold); color: var(--gold-bright); background: #4a3822; }
 .memory .type-badge { color: #221f1a; background: var(--ivory); }
 .score .type-badge, .recent-badge { color: #eef6ff; background: var(--blue); }
+.score .type-badge, .recent-badge.score { overflow: hidden; border-radius: 11px; background: #0b0e14; }
 .card-copy { min-width: 0; }
 .card-copy strong, .recent-copy strong { display: block; font: 400 18px/1.25 "Libre Baskerville", Georgia, serif; letter-spacing: -.025em; }
 .card-copy small, .recent-copy small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; }
