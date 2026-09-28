@@ -26,6 +26,7 @@ button, input { font: inherit; }
 button { color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
 [hidden] { display: none !important; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .app-shell { position: relative; width: min(100%, 460px); min-height: 100dvh; margin: 0 auto; overflow: hidden; background: radial-gradient(circle at 85% 5%, #6b4c2726, transparent 31%), var(--background); }
 .app-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; min-height: 68px; padding: calc(10px + env(safe-area-inset-top)) 22px 10px; border-bottom: 1px solid #352f29; background: #171411e8; backdrop-filter: blur(14px); }

@@ -550,13 +550,15 @@ async function openProject(project) {
     });
     heading.append(number, track, play);
     const label = document.createElement('label');
-    label.textContent = 'The scene for this track';
+    const accessibleLabel = document.createElement('span');
+    accessibleLabel.className = 'visually-hidden';
+    accessibleLabel.textContent = `Describe the scene for ${song.title}`;
     const textarea = document.createElement('textarea');
     textarea.rows = 5;
-    textarea.placeholder = 'Describe what happens when this song plays…';
+    textarea.placeholder = 'Describe the scene for this song…';
     textarea.value = song.scene || '';
     textarea.addEventListener('input', () => saveScene(project.id, index, textarea.value));
-    label.append(textarea);
+    label.append(accessibleLabel, textarea);
     card.append(heading, label);
     sceneList.append(card);
   });
