@@ -112,6 +112,10 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .collaborator-chip button { margin-left: 6px; padding: 0; border: 0; background: transparent; color: #ffb4aa; font-size: 14px; line-height: 1; }
 .project-summary { margin: 24px 0 10px; color: var(--muted); font-size: 11px; }
 .scene-list { display: grid; gap: 10px; }
+.project-sync { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
+.project-sync button { padding: 8px 11px; border: 1px solid #5a4938; border-radius: 999px; background: #211d19; color: var(--gold-bright); font-size: 10px; font-weight: 700; }
+.project-sync button:disabled { cursor: wait; opacity: .65; }
+.project-sync span { color: var(--muted); font-size: 10px; text-align: right; }
 .playlist-reconnect { margin-top: 18px; padding: 16px; border: 1px solid #55483a; border-radius: 13px; background: var(--surface); }
 .playlist-reconnect label { display: block; margin-bottom: 8px; color: var(--gold-bright); font-size: 11px; font-weight: 700; }
 .playlist-reconnect input { width: 100%; }

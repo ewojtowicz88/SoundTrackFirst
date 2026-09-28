@@ -280,7 +280,15 @@ function setActiveNav(name) {
   document.querySelector(`#nav-${name}-button`)?.classList.add('active');
 }
 
+function setOpenProjectUrl(projectId = null) {
+  const url = new URL(window.location.href);
+  if (projectId) url.searchParams.set('project', projectId);
+  else url.searchParams.delete('project');
+  window.history.replaceState({}, '', url);
+}
+
 function showCreate() {
+  setOpenProjectUrl();
   createScreen.hidden = false;
   setupScreen.hidden = true;
   projectScreen.hidden = true;
@@ -296,6 +304,7 @@ async function showLibrary() {
     showAuth();
     return;
   }
+  setOpenProjectUrl();
   const projects = getProjects()[session.username] || [];
   const list = document.querySelector('#library-list');
   list.replaceChildren(...projects.map(makeProjectCard));
@@ -553,6 +562,8 @@ function saveProjectTitle() {
 
 async function openProject(project) {
   activeProject = project;
+  setOpenProjectUrl(project.id);
+  document.querySelector('#refresh-project-status').textContent = '';
   project.ownerEmail ||= getSession()?.username || '';
   project.collaborators ||= [];
   closeTitleEditor();
@@ -647,6 +658,39 @@ async function openProject(project) {
   });
 }
 
+async function refreshActiveProject() {
+  if (!activeProject || !getSession()) return;
+  const button = document.querySelector('#refresh-project-button');
+  const status = document.querySelector('#refresh-project-status');
+  button.disabled = true;
+  status.textContent = 'Checking for changes…';
+  try {
+    const { data, error } = await supabaseClient
+      .from('projects')
+      .select('data, collaborator_emails')
+      .eq('id', activeProject.id)
+      .single();
+    if (error) throw error;
+    const refreshed = {
+      ...data.data,
+      collaborators: data.collaborator_emails || data.data.collaborators || []
+    };
+    const session = getSession();
+    const projects = getProjects();
+    projects[session.username] ||= [];
+    const index = projects[session.username].findIndex(item => item.id === refreshed.id);
+    if (index >= 0) projects[session.username][index] = refreshed;
+    else projects[session.username].unshift(refreshed);
+    localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+    await openProject(refreshed);
+    status.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  } catch (error) {
+    status.textContent = error.message || 'Could not refresh changes.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function hashPassword(password) {
   const bytes = new TextEncoder().encode(password);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -673,6 +717,7 @@ function showProfile() {
     showAuth();
     return;
   }
+  setOpenProjectUrl();
   const projects = getProjects()[session.username] || [];
   const sceneCount = projects.reduce((total, project) => total + (project.playlist?.songs?.length || 0), 0);
   const initials = session.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
@@ -703,6 +748,7 @@ function showProfile() {
 async function logout() {
   await supabaseClient.auth.signOut();
   currentSession = null;
+  setOpenProjectUrl();
   pendingFormat = null;
   closeProfileMenu();
   setupScreen.hidden = true;
@@ -737,6 +783,7 @@ function showAuth() {
 }
 
 function openFormat(name) {
+  setOpenProjectUrl();
   const format = formats[name];
   activeFormat = name;
   resolvedSource = null;
@@ -990,6 +1037,7 @@ document.querySelector('#collaborator-search').addEventListener('input', event =
   document.querySelector('#collaborator-message').textContent = '';
   renderCollaboratorOptions(event.target.value);
 });
+document.querySelector('#refresh-project-button').addEventListener('click', refreshActiveProject);
 
 async function initializeAccount() {
   const { data } = await supabaseClient.auth.getSession();
@@ -999,6 +1047,12 @@ async function initializeAccount() {
     catch (error) { console.warn('Saved creations could not be loaded.', error); }
   }
   updateProfileButton();
+  const requestedProjectId = new URL(window.location.href).searchParams.get('project');
+  if (currentSession && requestedProjectId) {
+    const project = (getProjects()[currentSession.username] || []).find(item => item.id === requestedProjectId);
+    if (project) await openProject(project);
+    else setOpenProjectUrl();
+  }
 }
 
 supabaseClient.auth.onAuthStateChange((_event, session) => {
