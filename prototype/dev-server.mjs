@@ -1,11 +1,40 @@
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
 const port = 4174;
 const root = new URL('.', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
 const prefix = '/SoundTrackFirst/prototype/';
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const dataDirectory = join(root, 'backend-data');
+const usersFile = join(dataDirectory, 'users.json');
+const projectsFile = join(dataDirectory, 'projects.json');
+
+async function readJson(file, fallback) {
+  try { return JSON.parse(await readFile(file, 'utf8')); } catch { return fallback; }
+}
+
+async function writeJson(file, value) {
+  await mkdir(dataDirectory, { recursive: true });
+  await writeFile(file, JSON.stringify(value, null, 2), 'utf8');
+}
+
+async function readBody(request) {
+  let body = '';
+  for await (const chunk of request) body += chunk;
+  return body ? JSON.parse(body) : {};
+}
+
+function json(response, status, value) {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  response.end(JSON.stringify(value));
+}
+
+async function authenticate(request, email) {
+  const users = await readJson(usersFile, []);
+  const password = request.headers['x-demo-password'] || '';
+  return users.find(user => user.email === String(email || '').toLowerCase() && user.password === password) || null;
+}
 
 function firstSource(container) {
   return container?.sources?.find(source => source?.url)?.url || '';
@@ -93,6 +122,52 @@ async function readSpotifyPlaylist(playlistId) {
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
+    if (url.pathname === `${prefix}api/auth/register` && request.method === 'POST') {
+      const body = await readBody(request);
+      const email = String(body.email || '').trim().toLowerCase();
+      const users = await readJson(usersFile, []);
+      if (!email || !body.password || !body.displayName) return json(response, 400, { error: 'Name, email, and password are required.' });
+      if (users.some(user => user.email === email)) return json(response, 409, { error: 'An account already exists for that email address.' });
+      users.push({ email, password: String(body.password), displayName: String(body.displayName).trim(), createdAt: new Date().toISOString() });
+      await writeJson(usersFile, users);
+      return json(response, 201, { email, displayName: String(body.displayName).trim() });
+    }
+    if (url.pathname === `${prefix}api/auth/login` && request.method === 'POST') {
+      const body = await readBody(request);
+      const user = await authenticate({ headers: { 'x-demo-password': String(body.password || '') } }, body.email);
+      return user ? json(response, 200, { email: user.email, displayName: user.displayName }) : json(response, 401, { error: 'That email address and password do not match.' });
+    }
+    if (url.pathname === `${prefix}api/projects` && request.method === 'GET') {
+      const email = String(url.searchParams.get('email') || '').toLowerCase();
+      const user = await authenticate(request, email);
+      if (!user) return json(response, 401, { error: 'Sign in again.' });
+      const projects = await readJson(projectsFile, []);
+      return json(response, 200, { projects: projects.filter(project => project.ownerEmail === email || (project.collaborators || []).includes(email)) });
+    }
+    if (url.pathname === `${prefix}api/projects` && request.method === 'PUT') {
+      const project = await readBody(request);
+      const email = String(project.requestingEmail || '').toLowerCase();
+      const user = await authenticate(request, email);
+      if (!user) return json(response, 401, { error: 'Sign in again.' });
+      delete project.requestingEmail;
+      if (project.ownerEmail !== email && !(project.collaborators || []).includes(email)) return json(response, 403, { error: 'You do not have access.' });
+      const projects = await readJson(projectsFile, []);
+      const index = projects.findIndex(item => item.id === project.id);
+      if (index >= 0) projects[index] = project; else projects.unshift(project);
+      await writeJson(projectsFile, projects);
+      return json(response, 200, { project });
+    }
+    const projectDeleteMatch = url.pathname.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}api/projects/([^/]+)$`));
+    if (projectDeleteMatch && request.method === 'DELETE') {
+      const email = String(url.searchParams.get('email') || '').toLowerCase();
+      const user = await authenticate(request, email);
+      if (!user) return json(response, 401, { error: 'Sign in again.' });
+      const projects = await readJson(projectsFile, []);
+      const project = projects.find(item => item.id === projectDeleteMatch[1]);
+      if (!project || project.ownerEmail !== email) return json(response, 403, { error: 'Only the creator can delete this creation.' });
+      await writeJson(projectsFile, projects.filter(item => item.id !== project.id));
+      return json(response, 200, { deleted: true });
+    }
     const playlistMatch = url.pathname.match(/^\/SoundTrackFirst\/prototype\/api\/playlist\/([A-Za-z0-9]{22})$/);
     if (playlistMatch) {
       const playlist = await readSpotifyPlaylist(playlistMatch[1]);

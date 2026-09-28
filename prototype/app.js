@@ -115,6 +115,25 @@ function getProjects() {
   try { return JSON.parse(localStorage.getItem('sfPrototypeProjects')) || {}; } catch { return {}; }
 }
 
+async function demoApi(path, options = {}, passwordOverride = null) {
+  const session = getSession();
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const password = passwordOverride ?? session?.password;
+  if (password) headers.set('X-Demo-Password', password);
+  const response = await fetch(`api/${path}`, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Unable to complete that request.');
+  return data;
+}
+
+async function loadRemoteProjects(session) {
+  const data = await demoApi(`projects?email=${encodeURIComponent(session.username)}`);
+  const projects = getProjects();
+  projects[session.username] = data.projects || [];
+  localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+}
+
 function syncProject(project) {
   const projects = getProjects();
   const participants = new Set([project.ownerEmail, ...(project.collaborators || [])].filter(Boolean));
@@ -126,6 +145,8 @@ function syncProject(project) {
     else projects[email].unshift(copy);
   }
   localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+  const session = getSession();
+  if (session) demoApi('projects', { method: 'PUT', body: JSON.stringify({ ...project, requestingEmail: session.username }) }).catch(() => {});
 }
 
 function renderProjects() {
@@ -146,6 +167,7 @@ function deleteProject(project) {
   const projects = getProjects();
   for (const email of Object.keys(projects)) projects[email] = (projects[email] || []).filter(item => item.id !== project.id);
   localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+  demoApi(`projects/${encodeURIComponent(project.id)}?email=${encodeURIComponent(session.username)}`, { method: 'DELETE' }).catch(() => {});
   renderProjects();
   return true;
 }
@@ -723,31 +745,34 @@ authForm.addEventListener('submit', async event => {
   event.preventDefault();
   const username = document.querySelector('#username').value.trim().toLowerCase();
   const password = document.querySelector('#password').value;
-  const users = getUsers();
-  const passwordHash = await hashPassword(password);
   const error = document.querySelector('#auth-error');
-
-  if (authMode === 'create') {
+  const submit = document.querySelector('#auth-submit');
+  submit.disabled = true;
+  error.textContent = '';
+  try {
     const displayName = document.querySelector('#display-name').value.trim();
-    if (users[username]) {
-      error.textContent = 'An account already exists for that email address. Try logging in.';
-      return;
-    }
-    users[username] = { displayName, passwordHash };
+    const result = await demoApi(
+      authMode === 'create' ? 'auth/register' : 'auth/login',
+      { method: 'POST', body: JSON.stringify({ email: username, password, displayName }) },
+      password
+    );
+    const users = getUsers();
+    users[username] = { displayName: result.displayName };
     localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
-  } else if (!users[username] || users[username].passwordHash !== passwordHash) {
-    error.textContent = 'That email address and password do not match.';
-    return;
-  }
-
-  const user = users[username];
-  localStorage.setItem('sfPrototypeSession', JSON.stringify({ username, displayName: user.displayName }));
-  updateProfileButton();
-  authDialog.close();
-  if (pendingFormat) {
-    const destination = pendingFormat;
-    pendingFormat = null;
-    openFormat(destination);
+    const session = { username: result.email, displayName: result.displayName, password };
+    localStorage.setItem('sfPrototypeSession', JSON.stringify(session));
+    await loadRemoteProjects(session);
+    updateProfileButton();
+    authDialog.close();
+    if (pendingFormat) {
+      const destination = pendingFormat;
+      pendingFormat = null;
+      openFormat(destination);
+    }
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    submit.disabled = false;
   }
 });
 
@@ -844,7 +869,7 @@ document.querySelector('#create-item').addEventListener('click', () => {
     } : null
   });
   const project = projects[session.username][0];
-  localStorage.setItem('sfPrototypeProjects', JSON.stringify(projects));
+  syncProject(project);
   nameInput.value = '';
   setupScreen.hidden = true;
   if (activeFormat === 'Score to Scene') openProject(project);
