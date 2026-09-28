@@ -362,7 +362,7 @@ async function repairProject(project, force = false) {
   const scenesByTrack = new Map(existingSongs.map(song => [song.id, song.scene || '']));
   project.playlist = {
     ...playlist,
-    metadataVersion: 2,
+    metadataVersion: 3,
     songs: playlist.songs.map((song, index) => ({ ...song, position: index + 1, scene: scenesByTrack.get(song.id) || existingSongs[index]?.scene || '' }))
   };
   project.updatedAt = new Date().toISOString();
@@ -572,7 +572,7 @@ async function openProject(project) {
   projectScreen.hidden = false;
   profileScreen.hidden = true;
   libraryScreen.hidden = true;
-  if (project.playlist?.songs?.length && project.playlist.metadataVersion !== 2 && project.sourceUrl) {
+  if (project.playlist?.songs?.length && project.playlist.metadataVersion !== 3 && project.sourceUrl) {
     try { await repairProject(project, true); } catch { /* Keep the saved playlist if metadata refresh fails. */ }
   }
   if (!project.playlist?.songs?.length) {
@@ -629,11 +629,19 @@ async function openProject(project) {
     number.textContent = String(index + 1);
     const track = document.createElement('div');
     track.className = 'scene-song';
+    const artwork = document.createElement('img');
+    artwork.className = 'scene-song-art';
+    artwork.alt = '';
+    artwork.loading = 'lazy';
+    artwork.hidden = !song.image;
+    if (song.image) artwork.src = song.image;
+    const songCopy = document.createElement('div');
     const title = document.createElement('strong');
     title.textContent = song.title;
     const artist = document.createElement('small');
     artist.textContent = song.artists;
-    track.append(title, artist);
+    songCopy.append(title, artist);
+    track.append(artwork, songCopy);
     const play = document.createElement('button');
     play.className = 'scene-play';
     play.type = 'button';
@@ -973,7 +981,7 @@ document.querySelector('#create-item').addEventListener('click', () => {
     createdAt: new Date().toISOString(),
     playlist: resolvedSource ? {
       ...resolvedSource,
-      metadataVersion: 2,
+      metadataVersion: 3,
       songs: (resolvedSource.songs || []).map((song, index) => ({ ...song, position: index + 1, scene: '' }))
     } : null
   });

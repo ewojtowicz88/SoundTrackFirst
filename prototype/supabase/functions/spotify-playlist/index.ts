@@ -13,6 +13,20 @@ function decodeBase64Json(value: string) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+async function addMissingTrackImages(songs: any[]) {
+  const enriched = songs.map(song => ({ ...song }));
+  for (let index = 0; index < enriched.length; index += 10) {
+    await Promise.all(enriched.slice(index, index + 10).map(async song => {
+      if (song.image) return;
+      try {
+        const response = await fetch(`https://open.spotify.com/oembed?url=https://open.spotify.com/track/${song.id}`);
+        if (response.ok) song.image = (await response.json()).thumbnail_url || '';
+      } catch { /* Keep the song usable if artwork is unavailable. */ }
+    }));
+  }
+  return enriched;
+}
+
 async function readSpotifyPlaylist(playlistId: string) {
   const spotifyUrl = `https://open.spotify.com/playlist/${playlistId}`;
   const headers = { 'User-Agent': 'Mozilla/5.0 SoundtrackFirstPrototype/1.0', 'Accept-Language': 'en-US,en;q=0.9' };
@@ -69,6 +83,7 @@ async function readSpotifyPlaylist(playlistId: string) {
       id,
       title: track.name,
       artists: (track.artists?.items || []).map((artist: any) => artist?.profile?.name).filter(Boolean).join(', ') || 'Unknown artist',
+      image: firstSource(track.albumOfTrack?.coverArt),
     }];
   });
   const owner = playlist.ownerV2?.data;
@@ -83,12 +98,17 @@ async function readSpotifyPlaylist(playlistId: string) {
     songs,
     truncated: Number(playlist.content?.totalCount || songs.length) > songs.length,
   };
-  return embedPlaylist ? {
+  const result = embedPlaylist ? {
     ...publicPlaylist,
     image: embedPlaylist.image || publicPlaylist.image,
-    songs: embedPlaylist.songs,
+    songs: embedPlaylist.songs.map((song: any) => ({
+      ...song,
+      image: publicPlaylist.songs.find((item: any) => item.id === song.id)?.image || '',
+    })),
     truncated: Number(playlist.content?.totalCount || embedPlaylist.songs.length) > embedPlaylist.songs.length,
   } : publicPlaylist;
+  result.songs = await addMissingTrackImages(result.songs);
+  return result;
 }
 
 Deno.serve(async request => {

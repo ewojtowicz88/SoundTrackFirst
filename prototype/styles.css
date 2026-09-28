@@ -122,9 +122,11 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .playlist-reconnect button { width: 100%; margin-top: 10px; }
 .playlist-reconnect .form-message { margin-bottom: 0; }
 .scene-card { border: 1px solid #443a30; border-radius: 14px; background: var(--surface); overflow: hidden; }
-.scene-head { display: grid; grid-template-columns: 34px minmax(0,1fr) 40px; align-items: center; gap: 10px; padding: 13px; }
+.scene-head { display: grid; grid-template-columns: 24px minmax(0,1fr) 40px; align-items: center; gap: 10px; padding: 13px; }
 .scene-number { color: var(--gold); font-size: 10px; font-weight: 700; }
-.scene-song strong { display: block; font: 400 14px/1.25 "Libre Baskerville",Georgia,serif; }
+.scene-song { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.scene-song-art { width: 46px; height: 46px; border-radius: 7px; object-fit: cover; background: #15120f; }
+.scene-song strong { display: block; overflow-wrap: anywhere; font: 400 14px/1.25 "Libre Baskerville",Georgia,serif; }
 .scene-song small { color: var(--muted); font-size: 10px; }
 .scene-play { width: 38px; height: 38px; border: 1px solid var(--gold); border-radius: 50%; background: none; color: var(--gold-bright); }
 .scene-play svg { width: 17px; height: 17px; margin: 2px 0 0 2px; fill: currentColor; }
