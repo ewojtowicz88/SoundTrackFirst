@@ -1,12 +1,13 @@
 name: Deploy site to GitHub Pages
 
-# Publishes the self-contained rebuild stored in /site.
+# Publishes the current site plus the isolated prototype at /prototype/.
 
 on:
   push:
     branches: [main]
     paths:
       - "site/**"
+      - "prototype/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -28,9 +29,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _pages
+          cp -R site/. _pages/
+          mkdir -p _pages/prototype
+          cp -R prototype/. _pages/prototype/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: _pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
