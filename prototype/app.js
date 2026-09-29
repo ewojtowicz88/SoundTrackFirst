@@ -1,6 +1,6 @@
 const formats = {
   Bookclub: {
-    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c3.2-.6 5.7.1 8.5 2.2v11c-2.8-2.1-5.3-2.8-8.5-2.2v-11Zm17 0c-3.2-.6-5.7.1-8.5 2.2v11c2.8-2.1 5.3-2.8 8.5-2.2v-11Z"/></svg>',
+    icon: '<img src="assets/bookclub-icon.jpeg" alt="">',
     className: 'bookclub',
     description: 'Create a shared space for a book, its readers, and the conversation that grows around it.',
     sourceLabel: 'Audible book link',
@@ -9,16 +9,16 @@ const formats = {
     lookupLabel: 'Find this book'
   },
   'Memory Box': {
-    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5 12 4l8 4.5-8 4.5-8-4.5Zm0 0V17l8 4 8-4V8.5M12 13v8"/></svg>',
+    icon: '<img src="assets/memorybox-icon.jpeg" alt="">',
     className: 'memory',
     description: 'Collect songs, photographs, notes, and memories with the people who were there.',
-    sourceLabel: 'Spotify playlist link',
-    sourcePlaceholder: 'https://open.spotify.com/playlist/…',
-    sourceHelp: 'Paste the Spotify playlist that will hold this collection of memories.',
-    lookupLabel: 'Find this playlist'
+    sourceLabel: 'Spotify playlist or song link (optional)',
+    sourcePlaceholder: 'https://open.spotify.com/playlist/… or /track/…',
+    sourceHelp: 'Start with a playlist, one song, or an empty Memory Box. You can add more songs and photos later.',
+    lookupLabel: 'Add Spotify music'
   },
   'Score to Scene': {
-    icon: '<img src="assets/score-to-scene-icon.png" alt="">',
+    icon: '<img src="assets/score-to-scene-icon.jpeg" alt="">',
     className: 'score',
     description: 'Start with a Spotify playlist, then write the scene that belongs to every track.',
     sourceLabel: 'Spotify playlist link',
@@ -233,8 +233,13 @@ function makeProjectCard(project) {
   const art = document.createElement('span');
   art.className = 'recent-art';
   art.setAttribute('aria-hidden', 'true');
-  if (project.playlist?.image) {
-    art.style.backgroundImage = `url("${project.playlist.image}")`;
+  const source = project.type === 'Bookclub'
+    ? project.book
+    : project.type === 'Memory Box'
+      ? { image: project.memoryCover || project.memoryItems?.find(item => item.image)?.image || '' }
+      : project.playlist;
+  if (source?.image) {
+    art.style.backgroundImage = `url("${source.image}")`;
     art.style.backgroundSize = 'cover';
     art.style.backgroundPosition = 'center';
   }
@@ -243,7 +248,13 @@ function makeProjectCard(project) {
   const title = document.createElement('strong');
   title.textContent = project.name;
   const detail = document.createElement('small');
-  detail.textContent = `${project.type} · ${project.playlist?.songs?.length || 0} tracks`;
+  const itemCount = project.type === 'Bookclub'
+    ? (project.book?.chapters?.length || 0)
+    : project.type === 'Memory Box'
+      ? (project.memoryItems?.length || project.playlist?.songs?.length || 0)
+      : (project.playlist?.songs?.length || 0);
+  const itemLabel = project.type === 'Bookclub' ? 'chapters' : project.type === 'Memory Box' ? 'memories' : 'tracks';
+  detail.textContent = `${project.type} · ${itemCount} ${itemLabel}`;
   copy.append(title, detail);
   const actions = document.createElement('span');
   actions.className = 'recent-actions';
@@ -315,10 +326,13 @@ async function showLibrary() {
   profileScreen.hidden = true;
   libraryScreen.hidden = false;
   setActiveNav('library');
-  const missing = projects.filter(project => !project.playlist?.songs?.length && project.sourceUrl && ['Score to Scene', 'Memory Box'].includes(project.type));
+  const missing = projects.filter(project => project.sourceUrl && (
+    (project.type === 'Bookclub' && !project.book?.chapters?.length) ||
+    (project.type === 'Score to Scene' && !project.playlist?.songs?.length)
+  ));
   if (missing.length) {
     try {
-      await Promise.all(missing.map(repairProject));
+      await Promise.all(missing.map(project => project.type === 'Bookclub' ? repairBookProject(project) : repairProject(project)));
       list.replaceChildren(...projects.map(makeProjectCard));
     } catch (error) {
       console.warn('A saved playlist could not be refreshed.', error);
@@ -331,6 +345,29 @@ function spotifyPlaylistId(value) {
     const url = new URL(value);
     if (!['open.spotify.com', 'spotify.com'].includes(url.hostname)) return null;
     return url.pathname.match(/^\/(?:intl-[a-z]{2}\/)?playlist\/([A-Za-z0-9]{22})\/?$/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+function spotifyTrackId(value) {
+  try {
+    const url = new URL(value);
+    if (!['open.spotify.com', 'spotify.com'].includes(url.hostname)) return null;
+    return url.pathname.match(/^\/(?:intl-[a-z]{2}\/)?track\/([A-Za-z0-9]{22})\/?$/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+function audibleAsin(value) {
+  try {
+    const url = new URL(value);
+    if (!/(^|\.)audible\.(com|ca|co\.uk|com\.au)$/.test(url.hostname)) return null;
+    const segments = url.pathname.split('/').filter(Boolean);
+    const pdIndex = segments.findIndex(segment => segment.toLowerCase() === 'pd');
+    if (pdIndex < 0) return null;
+    return segments.slice(pdIndex + 1).find(segment => /^[A-Z0-9]{10}$/i.test(segment))?.toUpperCase() || null;
   } catch {
     return null;
   }
@@ -353,6 +390,76 @@ async function importPlaylist(sourceValue) {
   }
   if (!playlist.songs?.length) throw new Error('No public tracks were found in this playlist');
   return playlist;
+}
+
+async function importSpotifyTrack(sourceValue) {
+  const trackId = spotifyTrackId(sourceValue);
+  if (!trackId) throw new Error('Invalid Spotify track link');
+  let track = null;
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    try {
+      const response = await fetch(new URL(`api/track/${trackId}`, prototypeRoot));
+      if (response.ok) track = await response.json();
+    } catch { /* Use the hosted importer below. */ }
+  }
+  if (!track) {
+    const { data, error } = await supabaseClient.functions.invoke('spotify-playlist', { body: { trackId } });
+    if (error) throw error;
+    track = data;
+  }
+  if (!track?.title) throw new Error('No public details were found for this track');
+  return track;
+}
+
+function songToMemoryItem(song) {
+  return {
+    id: crypto.randomUUID(),
+    type: 'song',
+    spotifyId: song.id,
+    title: song.title,
+    artists: song.artists || 'Unknown artist',
+    image: song.image || '',
+    url: song.url || `https://open.spotify.com/track/${song.id}`,
+    durationMs: song.durationMs || 0,
+    comments: []
+  };
+}
+
+async function importAudibleBook(sourceValue) {
+  const asin = audibleAsin(sourceValue);
+  if (!asin) throw new Error('Invalid Audible book link');
+  let book = null;
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    try {
+      const response = await fetch(new URL(`api/audible/${asin}`, prototypeRoot));
+      if (response.ok) book = await response.json();
+    } catch { /* Use the hosted importer below. */ }
+  }
+  if (!book) {
+    const { data, error } = await supabaseClient.functions.invoke('audible-book', { body: { asin } });
+    if (error) throw error;
+    book = data;
+  }
+  if (!book?.chapters?.length) throw new Error('No chapters were found for this Audible book');
+  return book;
+}
+
+async function repairBookProject(project, force = false) {
+  if ((!force && project.book?.chapters?.length) || !project.sourceUrl || project.type !== 'Bookclub') return project;
+  const imported = await importAudibleBook(project.sourceUrl);
+  const existingChapters = project.book?.chapters || [];
+  const commentsByChapter = new Map(existingChapters.map(chapter => [chapter.id, chapter.comments || []]));
+  project.book = {
+    ...imported,
+    metadataVersion: 1,
+    chapters: imported.chapters.map((chapter, index) => ({
+      ...chapter,
+      comments: commentsByChapter.get(chapter.id) || existingChapters[index]?.comments || []
+    }))
+  };
+  project.updatedAt = new Date().toISOString();
+  syncProject(project);
+  return project;
 }
 
 async function repairProject(project, force = false) {
@@ -560,6 +667,383 @@ function saveProjectTitle() {
   renderProjects();
 }
 
+function formatChapterLength(lengthMs) {
+  const minutes = Math.max(1, Math.round(Number(lengthMs || 0) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours} hr${hours === 1 ? '' : 's'}${remainder ? ` ${remainder} min` : ''}`;
+}
+
+async function addBookComment(project, chapterId, body) {
+  const session = getSession();
+  const message = body.trim();
+  if (!session || !message) return;
+  let latest = project;
+  const { data, error } = await supabaseClient
+    .from('projects')
+    .select('data, collaborator_emails')
+    .eq('id', project.id)
+    .single();
+  if (!error && data?.data) {
+    latest = { ...data.data, collaborators: data.collaborator_emails || data.data.collaborators || [] };
+  }
+  const chapter = latest.book?.chapters?.find(item => item.id === chapterId);
+  if (!chapter) throw new Error('That chapter could not be found. Refresh and try again.');
+  chapter.comments ||= [];
+  chapter.comments.push({
+    id: crypto.randomUUID(),
+    body: message,
+    authorEmail: session.username,
+    authorName: session.displayName,
+    createdAt: new Date().toISOString()
+  });
+  latest.updatedAt = new Date().toISOString();
+  const { error: updateError } = await supabaseClient
+    .from('projects')
+    .update({ data: latest, updated_at: latest.updatedAt })
+    .eq('id', latest.id);
+  if (updateError) throw updateError;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+function renderBookclubProject(project) {
+  const book = project.book;
+  document.querySelector('#project-type').textContent = 'Bookclub';
+  document.querySelector('#project-title').textContent = project.name;
+  document.querySelector('#project-playlist').textContent = book.name;
+  document.querySelector('#project-source-kind').textContent = 'Audible book';
+  const owner = document.querySelector('#project-owner');
+  owner.textContent = book.authors?.join(', ') || 'Author unavailable';
+  owner.href = book.url || project.sourceUrl;
+  document.querySelector('#project-owner-image').hidden = true;
+  renderLinkedText(document.querySelector('#project-description'), book.description || 'No book description was provided.');
+  const cover = document.querySelector('#project-cover');
+  cover.hidden = !book.image;
+  if (book.image) cover.src = book.image;
+  const chapters = book.chapters || [];
+  const commentCount = chapters.reduce((total, chapter) => total + (chapter.comments?.length || 0), 0);
+  document.querySelector('#project-summary').textContent = `${chapters.length} chapter${chapters.length === 1 ? '' : 's'} · ${commentCount} discussion post${commentCount === 1 ? '' : 's'}`;
+  const sceneList = document.querySelector('#scene-list');
+  sceneList.replaceChildren();
+
+  chapters.forEach((chapter, index) => {
+    const card = document.createElement('article');
+    card.className = 'chapter-card';
+    const heading = document.createElement('div');
+    heading.className = 'chapter-heading';
+    const number = document.createElement('span');
+    number.className = 'chapter-number';
+    number.textContent = String(index + 1);
+    const titleWrap = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = chapter.title;
+    const length = document.createElement('small');
+    length.textContent = formatChapterLength(chapter.lengthMs);
+    titleWrap.append(title, length);
+    heading.append(number, titleWrap);
+
+    const discussion = document.createElement('div');
+    discussion.className = 'chapter-discussion';
+    if (!chapter.comments?.length) {
+      const empty = document.createElement('p');
+      empty.className = 'discussion-empty';
+      empty.textContent = 'Start the conversation about this chapter.';
+      discussion.append(empty);
+    }
+    for (const comment of chapter.comments || []) {
+      const post = document.createElement('article');
+      post.className = 'discussion-post';
+      const meta = document.createElement('p');
+      const author = document.createElement('strong');
+      author.textContent = comment.authorName || comment.authorEmail || 'Bookclub member';
+      const time = document.createElement('time');
+      time.dateTime = comment.createdAt || '';
+      time.textContent = comment.createdAt ? new Date(comment.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      meta.append(author, time);
+      const copy = document.createElement('p');
+      copy.textContent = comment.body;
+      post.append(meta, copy);
+      discussion.append(post);
+    }
+
+    const composer = document.createElement('form');
+    composer.className = 'chapter-composer';
+    const label = document.createElement('label');
+    label.className = 'visually-hidden';
+    label.htmlFor = `chapter-comment-${index}`;
+    label.textContent = `Add to the discussion for ${chapter.title}`;
+    const input = document.createElement('textarea');
+    input.id = `chapter-comment-${index}`;
+    input.rows = 2;
+    input.placeholder = 'Share a thought, question, or reaction…';
+    const button = document.createElement('button');
+    button.type = 'submit';
+    button.textContent = 'Post';
+    const status = document.createElement('p');
+    status.className = 'form-message chapter-status';
+    status.setAttribute('role', 'status');
+    composer.append(label, input, button, status);
+    composer.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!input.value.trim()) return input.focus();
+      button.disabled = true;
+      status.textContent = 'Posting…';
+      try {
+        await addBookComment(project, chapter.id, input.value);
+      } catch (error) {
+        status.textContent = error.message || 'Your comment could not be posted.';
+        button.disabled = false;
+      }
+    });
+    card.append(heading, discussion, composer);
+    sceneList.append(card);
+  });
+}
+
+async function latestRemoteProject(project) {
+  const { data, error } = await supabaseClient
+    .from('projects')
+    .select('data, collaborator_emails')
+    .eq('id', project.id)
+    .single();
+  return !error && data?.data
+    ? { ...data.data, collaborators: data.collaborator_emails || data.data.collaborators || [] }
+    : project;
+}
+
+async function saveMemoryItems(project, additions) {
+  const latest = await latestRemoteProject(project);
+  latest.memoryItems ||= [];
+  for (const item of additions) {
+    const duplicate = item.type === 'song' && latest.memoryItems.some(existing => existing.type === 'song' && existing.spotifyId === item.spotifyId);
+    if (!duplicate) latest.memoryItems.push(item);
+  }
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+async function addMemoryComment(project, itemId, body) {
+  const session = getSession();
+  const message = body.trim();
+  if (!session || !message) return;
+  const latest = await latestRemoteProject(project);
+  const item = latest.memoryItems?.find(entry => entry.id === itemId);
+  if (!item) throw new Error('That memory could not be found. Refresh and try again.');
+  item.comments ||= [];
+  item.comments.push({
+    id: crypto.randomUUID(),
+    body: message,
+    authorEmail: session.username,
+    authorName: session.displayName,
+    createdAt: new Date().toISOString()
+  });
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+function appendDiscussion(container, comments, emptyText) {
+  if (!comments?.length) {
+    const empty = document.createElement('p');
+    empty.className = 'discussion-empty';
+    empty.textContent = emptyText;
+    container.append(empty);
+  }
+  for (const comment of comments || []) {
+    const post = document.createElement('article');
+    post.className = 'discussion-post';
+    const meta = document.createElement('p');
+    const author = document.createElement('strong');
+    author.textContent = comment.authorName || comment.authorEmail || 'Memory Box member';
+    const time = document.createElement('time');
+    time.dateTime = comment.createdAt || '';
+    time.textContent = comment.createdAt ? new Date(comment.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    meta.append(author, time);
+    const copy = document.createElement('p');
+    copy.textContent = comment.body;
+    post.append(meta, copy);
+    container.append(post);
+  }
+}
+
+function renderMemoryBoxProject(project) {
+  project.memoryItems ||= (project.playlist?.songs || []).map(songToMemoryItem);
+  const items = project.memoryItems;
+  document.querySelector('#project-type').textContent = 'Memory Box';
+  document.querySelector('#project-title').textContent = project.name;
+  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || 'Songs, photos, and shared memories';
+  document.querySelector('#project-source-kind').textContent = 'Shared collection';
+  const owner = document.querySelector('#project-owner');
+  owner.textContent = 'Songs and photos';
+  owner.removeAttribute('href');
+  document.querySelector('#project-owner-image').hidden = true;
+  renderLinkedText(document.querySelector('#project-description'), 'Add music and photographs, then share the stories, reactions, and memories connected to each one.');
+  const cover = document.querySelector('#project-cover');
+  const coverUrl = project.memoryCover || project.playlist?.image || items.find(item => item.image)?.image || '';
+  cover.hidden = !coverUrl;
+  if (coverUrl) cover.src = coverUrl;
+  const commentCount = items.reduce((total, item) => total + (item.comments?.length || 0), 0);
+  document.querySelector('#project-summary').textContent = `${items.length} item${items.length === 1 ? '' : 's'} · ${commentCount} discussion post${commentCount === 1 ? '' : 's'}`;
+  const sceneList = document.querySelector('#scene-list');
+  sceneList.replaceChildren();
+
+  const addPanel = document.createElement('section');
+  addPanel.className = 'memory-add-panel';
+  const addTitle = document.createElement('h2');
+  addTitle.textContent = 'Add to this Memory Box';
+  const spotifyLabel = document.createElement('label');
+  spotifyLabel.htmlFor = 'memory-spotify-url';
+  spotifyLabel.textContent = 'Spotify playlist or song link';
+  const spotifyRow = document.createElement('div');
+  spotifyRow.className = 'memory-add-row';
+  const spotifyInput = document.createElement('input');
+  spotifyInput.id = 'memory-spotify-url';
+  spotifyInput.type = 'url';
+  spotifyInput.inputMode = 'url';
+  spotifyInput.placeholder = 'Paste a Spotify playlist or track link';
+  const spotifyButton = document.createElement('button');
+  spotifyButton.type = 'button';
+  spotifyButton.textContent = 'Add music';
+  spotifyRow.append(spotifyInput, spotifyButton);
+  const photoLabel = document.createElement('label');
+  photoLabel.htmlFor = 'memory-photo-title';
+  photoLabel.textContent = 'Photo';
+  const photoRow = document.createElement('div');
+  photoRow.className = 'memory-add-row memory-photo-row';
+  const photoTitle = document.createElement('input');
+  photoTitle.id = 'memory-photo-title';
+  photoTitle.type = 'text';
+  photoTitle.placeholder = 'Name this memory';
+  const photoInput = document.createElement('input');
+  photoInput.type = 'file';
+  photoInput.accept = 'image/*';
+  photoInput.className = 'memory-file-input';
+  const photoButton = document.createElement('button');
+  photoButton.type = 'button';
+  photoButton.textContent = 'Choose photo';
+  photoRow.append(photoTitle, photoButton, photoInput);
+  const addStatus = document.createElement('p');
+  addStatus.className = 'form-message';
+  addStatus.setAttribute('role', 'status');
+  addPanel.append(addTitle, spotifyLabel, spotifyRow, photoLabel, photoRow, addStatus);
+  sceneList.append(addPanel);
+
+  spotifyButton.addEventListener('click', async () => {
+    const url = spotifyInput.value.trim();
+    if (!url) return spotifyInput.focus();
+    spotifyButton.disabled = true;
+    addStatus.textContent = 'Adding music…';
+    try {
+      const playlistId = spotifyPlaylistId(url);
+      const trackId = spotifyTrackId(url);
+      if (!playlistId && !trackId) throw new Error('Paste a full Spotify playlist or track link.');
+      const additions = playlistId
+        ? (await importPlaylist(url)).songs.map(songToMemoryItem)
+        : [songToMemoryItem(await importSpotifyTrack(url))];
+      await saveMemoryItems(project, additions);
+    } catch (error) {
+      addStatus.textContent = error.message || 'That Spotify music could not be added.';
+      spotifyButton.disabled = false;
+    }
+  });
+
+  photoButton.addEventListener('click', () => photoInput.click());
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      addStatus.textContent = 'Choose an image file.';
+      return;
+    }
+    photoButton.disabled = true;
+    addStatus.textContent = 'Uploading photo…';
+    try {
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, '-');
+      const path = `${project.id}/${crypto.randomUUID()}-${safeName}`;
+      const { error } = await supabaseClient.storage.from('memory-box-images').upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data } = supabaseClient.storage.from('memory-box-images').getPublicUrl(path);
+      await saveMemoryItems(project, [{
+        id: crypto.randomUUID(),
+        type: 'photo',
+        title: photoTitle.value.trim() || file.name.replace(/\.[^.]+$/, ''),
+        image: data.publicUrl,
+        storagePath: path,
+        comments: []
+      }]);
+    } catch (error) {
+      addStatus.textContent = error.message || 'That photo could not be uploaded.';
+      photoButton.disabled = false;
+    }
+  });
+
+  items.forEach((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'memory-card';
+    const media = document.createElement('img');
+    media.className = 'memory-media';
+    media.src = item.image || 'assets/memorybox-icon.jpeg';
+    media.alt = item.type === 'photo' ? item.title : '';
+    media.loading = 'lazy';
+    const heading = document.createElement('div');
+    heading.className = 'memory-heading';
+    const eyebrow = document.createElement('small');
+    eyebrow.textContent = item.type === 'photo' ? 'Photo memory' : 'Spotify song';
+    const title = document.createElement('h2');
+    title.textContent = item.title || `Memory ${index + 1}`;
+    const byline = document.createElement('p');
+    byline.textContent = item.artists || '';
+    heading.append(eyebrow, title, byline);
+    if (item.type === 'song' && item.spotifyId) {
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.className = 'memory-play';
+      play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg>';
+      play.setAttribute('aria-label', `Play ${item.title}`);
+      play.addEventListener('click', () => startSpotifyTrack(item.spotifyId));
+      heading.append(play);
+    }
+    const top = document.createElement('div');
+    top.className = 'memory-top';
+    top.append(media, heading);
+    const discussion = document.createElement('div');
+    discussion.className = 'chapter-discussion';
+    appendDiscussion(discussion, item.comments, 'Be the first to share the story behind this memory.');
+    const composer = document.createElement('form');
+    composer.className = 'chapter-composer';
+    const input = document.createElement('textarea');
+    input.rows = 2;
+    input.placeholder = 'Share a memory, thought, or reaction…';
+    input.setAttribute('aria-label', `Comment on ${item.title}`);
+    const button = document.createElement('button');
+    button.type = 'submit';
+    button.textContent = 'Post';
+    const status = document.createElement('p');
+    status.className = 'form-message chapter-status';
+    composer.append(input, button, status);
+    composer.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!input.value.trim()) return input.focus();
+      button.disabled = true;
+      status.textContent = 'Posting…';
+      try { await addMemoryComment(project, item.id, input.value); }
+      catch (error) { status.textContent = error.message || 'Your comment could not be posted.'; button.disabled = false; }
+    });
+    card.append(top, discussion, composer);
+    sceneList.append(card);
+  });
+}
+
 async function openProject(project) {
   activeProject = project;
   setOpenProjectUrl(project.id);
@@ -570,8 +1054,58 @@ async function openProject(project) {
   createScreen.hidden = true;
   setupScreen.hidden = true;
   projectScreen.hidden = false;
+  projectScreen.dataset.type = project.type;
   profileScreen.hidden = true;
   libraryScreen.hidden = true;
+  document.querySelector('#project-type').textContent = project.type;
+  if (project.type === 'Bookclub') {
+    if (project.book?.chapters?.length && project.book.metadataVersion !== 1 && project.sourceUrl) {
+      try { await repairBookProject(project, true); } catch { /* Keep saved book details if refresh fails. */ }
+    }
+    if (!project.book?.chapters?.length) {
+      document.querySelector('#project-title').textContent = project.name;
+      document.querySelector('#project-playlist').textContent = 'Loading Audible book…';
+      document.querySelector('#project-summary').textContent = 'Loading the cover, details, and chapters from Audible…';
+      document.querySelector('#scene-list').replaceChildren();
+      try {
+        await repairBookProject(project);
+      } catch {
+        document.querySelector('#project-playlist').textContent = 'Audible book unavailable';
+        document.querySelector('#project-summary').textContent = 'This book could not be refreshed from its Audible link.';
+        return;
+      }
+    }
+    const isOwner = project.ownerEmail === getSession()?.username;
+    document.querySelector('#delete-project-button').hidden = !isOwner;
+    document.querySelector('#invite-collaborator-button').hidden = !isOwner;
+    document.querySelector('#invite-finder').hidden = true;
+    document.querySelector('#collaborator-search').value = '';
+    document.querySelector('#collaborator-options').replaceChildren();
+    document.querySelector('#collaborator-message').textContent = '';
+    renderCollaborators(project);
+    renderBookclubProject(project);
+    return;
+  }
+  if (project.type === 'Memory Box') {
+    if (!project.memoryItems && project.playlist?.songs?.length) {
+      project.memoryItems = project.playlist.songs.map(songToMemoryItem);
+      project.memoryCover = project.playlist.image || '';
+      project.memorySourceName = project.playlist.name || '';
+      project.updatedAt = new Date().toISOString();
+      syncProject(project);
+    }
+    project.memoryItems ||= [];
+    const isOwner = project.ownerEmail === getSession()?.username;
+    document.querySelector('#delete-project-button').hidden = !isOwner;
+    document.querySelector('#invite-collaborator-button').hidden = !isOwner;
+    document.querySelector('#invite-finder').hidden = true;
+    document.querySelector('#collaborator-search').value = '';
+    document.querySelector('#collaborator-options').replaceChildren();
+    document.querySelector('#collaborator-message').textContent = '';
+    renderCollaborators(project);
+    renderMemoryBoxProject(project);
+    return;
+  }
   if (project.playlist?.songs?.length && project.playlist.metadataVersion !== 3 && project.sourceUrl) {
     try { await repairProject(project, true); } catch { /* Keep the saved playlist if metadata refresh fails. */ }
   }
@@ -602,6 +1136,7 @@ async function openProject(project) {
   document.querySelector('#collaborator-options').replaceChildren();
   document.querySelector('#collaborator-message').textContent = '';
   renderCollaborators(project);
+  document.querySelector('#project-source-kind').textContent = 'Spotify playlist';
   document.querySelector('#project-playlist').textContent = project.playlist?.name || project.type;
   const owner = document.querySelector('#project-owner');
   owner.textContent = project.playlist?.owner || 'Spotify user';
@@ -727,14 +1262,19 @@ function showProfile() {
   }
   setOpenProjectUrl();
   const projects = getProjects()[session.username] || [];
-  const sceneCount = projects.reduce((total, project) => total + (project.playlist?.songs?.length || 0), 0);
+  const itemCount = projects.reduce((total, project) => total
+    + (project.type === 'Bookclub'
+      ? (project.book?.chapters?.length || 0)
+      : project.type === 'Memory Box'
+        ? (project.memoryItems?.length || project.playlist?.songs?.length || 0)
+        : (project.playlist?.songs?.length || 0)), 0);
   const initials = session.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
   document.querySelector('#profile-avatar').textContent = initials;
   document.querySelector('#profile-display-name').textContent = session.displayName;
   document.querySelector('#profile-username').textContent = session.username;
   const stats = document.querySelector('#profile-stats');
   stats.replaceChildren();
-  for (const [value, label] of [[projects.length, 'Creations'], [sceneCount, 'Playlist tracks']]) {
+  for (const [value, label] of [[projects.length, 'Creations'], [itemCount, 'Items & chapters']]) {
     const stat = document.createElement('div');
     stat.className = 'profile-stat';
     const number = document.createElement('strong');
@@ -809,7 +1349,8 @@ function openFormat(name) {
   sourceArt.style.backgroundImage = '';
   sourceArt.textContent = name === 'Bookclub' ? 'A' : '♫';
   metadataPreview.hidden = true;
-  nameStep.hidden = true;
+  nameStep.hidden = name !== 'Memory Box';
+  nameStep.querySelector('.primary-button').textContent = `Create ${name}`;
   createScreen.hidden = true;
   setupScreen.hidden = false;
   sourceUrl.focus();
@@ -898,13 +1439,15 @@ lookupSource.addEventListener('click', async () => {
   try {
     url = new URL(sourceUrl.value.trim());
   } catch {
-    formMessage.textContent = `Enter a valid ${activeFormat === 'Bookclub' ? 'Audible book' : 'Spotify playlist'} link.`;
+    formMessage.textContent = `Enter a valid ${activeFormat === 'Bookclub' ? 'Audible book' : 'Spotify playlist or song'} link.`;
     return;
   }
 
   const isBookclub = activeFormat === 'Bookclub';
   const playlistId = isBookclub ? null : spotifyPlaylistId(url.href);
-  const validHost = isBookclub ? /(^|\.)audible\.(com|ca|co\.uk|com\.au)$/.test(url.hostname) : Boolean(playlistId);
+  const trackId = isBookclub ? null : spotifyTrackId(url.href);
+  const bookAsin = isBookclub ? audibleAsin(url.href) : null;
+  const validHost = isBookclub ? Boolean(bookAsin) : activeFormat === 'Memory Box' ? Boolean(playlistId || trackId) : Boolean(playlistId);
   if (!validHost) {
     formMessage.textContent = `That does not look like an ${isBookclub ? 'Audible' : 'Spotify'} link.`;
     return;
@@ -914,13 +1457,24 @@ lookupSource.addEventListener('click', async () => {
   if (!isBookclub) {
     const originalLabel = lookupSource.textContent;
     lookupSource.disabled = true;
-    lookupSource.textContent = 'Finding playlist…';
+    lookupSource.textContent = trackId ? 'Finding song…' : 'Finding playlist…';
     try {
-      resolvedSource = await importPlaylist(url.href);
-      document.querySelector('#preview-label').textContent = 'Spotify playlist';
+      if (activeFormat === 'Memory Box' && trackId) {
+        const track = await importSpotifyTrack(url.href);
+        resolvedSource = { name: track.title, image: track.image, owner: track.artists, items: [songToMemoryItem(track)] };
+      } else {
+        const playlist = await importPlaylist(url.href);
+        resolvedSource = activeFormat === 'Memory Box'
+          ? { ...playlist, items: playlist.songs.map(songToMemoryItem) }
+          : playlist;
+      }
+      document.querySelector('#preview-label').textContent = trackId ? 'Spotify song' : 'Spotify playlist';
       document.querySelector('#preview-title').textContent = resolvedSource.name;
-      document.querySelector('#preview-byline').textContent = resolvedSource.owner || 'Spotify playlist';
-      document.querySelector('#preview-meta').textContent = `${resolvedSource.songs?.length || 0} tracks ready for scenes`;
+      document.querySelector('#preview-byline').textContent = resolvedSource.owner || 'Spotify';
+      const count = resolvedSource.items?.length || resolvedSource.songs?.length || 0;
+      document.querySelector('#preview-meta').textContent = activeFormat === 'Memory Box'
+        ? `${count} song${count === 1 ? '' : 's'} ready for your Memory Box`
+        : `${count} tracks ready for scenes`;
       const art = document.querySelector('#source-art');
       art.textContent = '';
       art.style.backgroundImage = resolvedSource.image ? `url("${resolvedSource.image}")` : '';
@@ -932,7 +1486,7 @@ lookupSource.addEventListener('click', async () => {
       return;
     } catch {
       resolvedSource = null;
-      formMessage.textContent = 'I could not read that playlist. Check that it is public and try again.';
+      formMessage.textContent = 'I could not read that Spotify music. Check that it is public and try again.';
       return;
     } finally {
       lookupSource.disabled = false;
@@ -940,14 +1494,33 @@ lookupSource.addEventListener('click', async () => {
     }
   }
 
-  document.querySelector('#preview-label').textContent = isBookclub ? 'Audible book' : 'Spotify playlist';
-  document.querySelector('#preview-title').textContent = isBookclub ? 'Audible details ready to import' : 'Playlist details ready to import';
-  document.querySelector('#preview-byline').textContent = isBookclub ? 'Title · Author · Narrator' : 'Playlist · Creator';
-  document.querySelector('#preview-meta').textContent = isBookclub ? 'Cover, runtime, release date, and description' : 'Cover, tracks, duration, and description';
-  document.querySelector('#source-art').textContent = isBookclub ? 'A' : '♫';
-  metadataPreview.hidden = false;
-  nameStep.hidden = false;
-  nameStep.querySelector('.primary-button').textContent = `Create ${activeFormat}`;
+  const originalLabel = lookupSource.textContent;
+  lookupSource.disabled = true;
+  lookupSource.textContent = 'Finding book…';
+  try {
+    resolvedSource = await importAudibleBook(url.href);
+    document.querySelector('#preview-label').textContent = 'Audible book';
+    document.querySelector('#preview-title').textContent = resolvedSource.name;
+    const authors = resolvedSource.authors?.join(', ') || 'Author unavailable';
+    const narrators = resolvedSource.narrators?.join(', ') || 'Narrator unavailable';
+    document.querySelector('#preview-byline').textContent = `${authors} · Narrated by ${narrators}`;
+    const runtime = resolvedSource.runtimeMinutes ? `${Math.floor(resolvedSource.runtimeMinutes / 60)} hr ${resolvedSource.runtimeMinutes % 60} min` : 'Runtime unavailable';
+    document.querySelector('#preview-meta').textContent = `${resolvedSource.chapters.length} chapters · ${runtime}`;
+    const art = document.querySelector('#source-art');
+    art.textContent = '';
+    art.style.backgroundImage = resolvedSource.image ? `url("${resolvedSource.image}")` : '';
+    art.style.backgroundSize = 'cover';
+    art.style.backgroundPosition = 'center';
+    metadataPreview.hidden = false;
+    nameStep.hidden = false;
+    nameStep.querySelector('.primary-button').textContent = `Create ${activeFormat}`;
+  } catch {
+    resolvedSource = null;
+    formMessage.textContent = 'I could not read that Audible book. Check the link and try again.';
+  } finally {
+    lookupSource.disabled = false;
+    lookupSource.textContent = originalLabel;
+  }
 });
 
 document.querySelector('#create-item').addEventListener('click', () => {
@@ -959,7 +1532,7 @@ document.querySelector('#create-item').addEventListener('click', () => {
   }
   const nameInput = document.querySelector('#creation-name');
   const name = nameInput.value.trim();
-  if (metadataPreview.hidden) {
+  if (metadataPreview.hidden && activeFormat !== 'Memory Box') {
     formMessage.textContent = `Find the ${activeFormat === 'Bookclub' ? 'book' : 'playlist'} before creating this item.`;
     sourceUrl.focus();
     return;
@@ -971,7 +1544,7 @@ document.querySelector('#create-item').addEventListener('click', () => {
   }
   const projects = getProjects();
   projects[session.username] ||= [];
-  projects[session.username].unshift({
+  const project = {
     id: crypto.randomUUID(),
     type: activeFormat,
     name,
@@ -979,17 +1552,25 @@ document.querySelector('#create-item').addEventListener('click', () => {
     collaborators: [],
     sourceUrl: sourceUrl.value.trim(),
     createdAt: new Date().toISOString(),
-    playlist: resolvedSource ? {
+    playlist: activeFormat === 'Score to Scene' && resolvedSource ? {
       ...resolvedSource,
       metadataVersion: 3,
       songs: (resolvedSource.songs || []).map((song, index) => ({ ...song, position: index + 1, scene: '' }))
-    } : null
-  });
-  const project = projects[session.username][0];
+    } : null,
+    book: activeFormat === 'Bookclub' && resolvedSource ? {
+      ...resolvedSource,
+      metadataVersion: 1,
+      chapters: (resolvedSource.chapters || []).map((chapter, index) => ({ ...chapter, position: index + 1, comments: [] }))
+    } : null,
+    memoryItems: activeFormat === 'Memory Box' ? (resolvedSource?.items || []) : null,
+    memoryCover: activeFormat === 'Memory Box' ? (resolvedSource?.image || '') : '',
+    memorySourceName: activeFormat === 'Memory Box' ? (resolvedSource?.name || '') : ''
+  };
+  projects[session.username].unshift(project);
   syncProject(project);
   nameInput.value = '';
   setupScreen.hidden = true;
-  if (activeFormat === 'Score to Scene') openProject(project);
+  if (['Score to Scene', 'Bookclub', 'Memory Box'].includes(activeFormat)) openProject(project);
   else createScreen.hidden = false;
   renderProjects();
 });

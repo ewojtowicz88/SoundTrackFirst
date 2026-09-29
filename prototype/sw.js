@@ -1,7 +1,7 @@
 importScripts('version.js');
 
 const CACHE_NAME = `soundtrack-first-prototype-v${globalThis.SOUNDTRACKFIRST_VERSION}`;
-const APP_FILES = ['./', 'index.html', 'styles.css', 'version.js', 'app.js', 'manifest.webmanifest', 'assets/soundtrack-first-logo.png', 'assets/score-to-scene-icon.png', 'assets/icon-180.png', 'assets/icon-192.png', 'assets/icon-512.png'];
+const APP_FILES = ['./', 'index.html', 'styles.css', 'version.js', 'app.js', 'manifest.webmanifest', 'assets/soundtrack-first-logo.png', 'assets/bookclub-icon.jpeg', 'assets/memorybox-icon.jpeg', 'assets/score-to-scene-icon.jpeg', 'assets/icon-180.png', 'assets/icon-192.png', 'assets/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_FILES)));

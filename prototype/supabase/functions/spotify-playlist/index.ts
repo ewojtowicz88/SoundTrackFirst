@@ -111,10 +111,35 @@ async function readSpotifyPlaylist(playlistId: string) {
   return result;
 }
 
+async function readSpotifyTrack(trackId: string) {
+  const response = await fetch(`https://open.spotify.com/embed/track/${trackId}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 SoundtrackFirstPrototype/1.0', 'Accept-Language': 'en-US,en;q=0.9' },
+  });
+  if (!response.ok) throw new Error('Spotify track unavailable');
+  const html = await response.text();
+  const nextData = html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/)?.[1];
+  const track = nextData ? JSON.parse(nextData)?.props?.pageProps?.state?.data?.entity : null;
+  if (!track?.title) throw new Error('Spotify track details unavailable');
+  return {
+    id: trackId,
+    type: 'song',
+    title: track.title,
+    artists: (track.artists || []).map((artist: any) => artist.name).filter(Boolean).join(', ') || 'Unknown artist',
+    image: track.visualIdentity?.image?.find((image: any) => image?.url)?.url || '',
+    url: `https://open.spotify.com/track/${trackId}`,
+    durationMs: track.duration || 0,
+    comments: [],
+  };
+}
+
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { playlistId } = await request.json();
+    const { playlistId, trackId } = await request.json();
+    if (trackId) {
+      if (!/^[A-Za-z0-9]{22}$/.test(String(trackId))) throw new Error('Invalid Spotify track link');
+      return Response.json(await readSpotifyTrack(String(trackId)), { headers: { ...corsHeaders, 'Cache-Control': 'public, max-age=3600' } });
+    }
     if (!/^[A-Za-z0-9]{22}$/.test(String(playlistId || ''))) throw new Error('Invalid Spotify playlist link');
     const playlist = await readSpotifyPlaylist(playlistId);
     if (!playlist.songs?.length) throw new Error('No public tracks were found in this playlist');

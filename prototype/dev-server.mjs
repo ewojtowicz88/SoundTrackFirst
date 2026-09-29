@@ -6,7 +6,7 @@ const port = Number(process.env.PORT || 4174);
 const host = process.env.HOST || '0.0.0.0';
 const root = new URL('.', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
 const prefix = '/SoundTrackFirst/prototype/';
-const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml' };
 const dataDirectory = process.env.DATA_DIR || join(root, 'backend-data');
 const usersFile = join(dataDirectory, 'users.json');
 const projectsFile = join(dataDirectory, 'projects.json');
@@ -140,6 +140,70 @@ async function readSpotifyPlaylist(playlistId) {
   return result;
 }
 
+async function readSpotifyTrack(trackId) {
+  const response = await fetch(`https://open.spotify.com/embed/track/${trackId}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 SoundtrackFirstPrototype/1.0', 'Accept-Language': 'en-US,en;q=0.9' }
+  });
+  if (!response.ok) throw new Error('Spotify track unavailable');
+  const html = await response.text();
+  const nextData = html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/)?.[1];
+  const track = nextData ? JSON.parse(nextData)?.props?.pageProps?.state?.data?.entity : null;
+  if (!track?.title) throw new Error('Spotify track details unavailable');
+  return {
+    id: trackId,
+    type: 'song',
+    title: track.title,
+    artists: (track.artists || []).map(artist => artist.name).filter(Boolean).join(', ') || 'Unknown artist',
+    image: track.visualIdentity?.image?.find(image => image?.url)?.url || '',
+    url: `https://open.spotify.com/track/${trackId}`,
+    durationMs: track.duration || 0,
+    comments: []
+  };
+}
+
+function plainText(html = '') {
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function readAudibleBook(asin) {
+  const catalogUrl = `https://api.audible.com/1.0/catalog/products/${asin}?response_groups=contributors,product_desc,product_extended_attrs,media`;
+  const chaptersUrl = `https://api.audible.com/1.0/content/${asin}/metadata?response_groups=chapter_info`;
+  const [catalogResponse, chaptersResponse] = await Promise.all([fetch(catalogUrl), fetch(chaptersUrl)]);
+  if (!catalogResponse.ok || !chaptersResponse.ok) throw new Error('Audible book unavailable');
+  const product = (await catalogResponse.json()).product;
+  const chapterInfo = (await chaptersResponse.json()).content_metadata?.chapter_info;
+  if (!product?.title || !chapterInfo?.chapters?.length) throw new Error('Audible book details unavailable');
+  return {
+    asin,
+    url: `https://www.audible.com/pd/${asin}`,
+    name: product.title,
+    subtitle: product.subtitle || '',
+    description: plainText(product.publisher_summary || product.merchandising_summary || ''),
+    image: product.product_images?.['500'] || product.product_images?.['300'] || '',
+    authors: (product.authors || []).map(author => author.name).filter(Boolean),
+    narrators: (product.narrators || []).map(narrator => narrator.name).filter(Boolean),
+    publisher: product.publisher_name || '',
+    releaseDate: product.release_date || product.publication_datetime || product.issue_date || '',
+    runtimeMinutes: product.runtime_length_min || Math.round((chapterInfo.runtime_length_ms || 0) / 60000),
+    chapters: chapterInfo.chapters.map((chapter, index) => ({
+      id: `${asin}-${index + 1}`,
+      title: chapter.title || `Chapter ${index + 1}`,
+      lengthMs: chapter.length_ms || 0,
+      comments: []
+    }))
+  };
+}
+
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
@@ -201,6 +265,13 @@ createServer(async (request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       response.end(JSON.stringify(playlist));
       return;
+    }
+    const trackMatch = url.pathname.match(/^\/SoundTrackFirst\/prototype\/api\/track\/([A-Za-z0-9]{22})$/);
+    if (trackMatch) return json(response, 200, await readSpotifyTrack(trackMatch[1]));
+    const audibleMatch = url.pathname.match(/^\/SoundTrackFirst\/prototype\/api\/audible\/([A-Z0-9]{10})$/i);
+    if (audibleMatch) {
+      const book = await readAudibleBook(audibleMatch[1].toUpperCase());
+      return json(response, 200, book);
     }
     if (!url.pathname.startsWith(prefix)) throw new Error('Not found');
     const relative = decodeURIComponent(url.pathname.slice(prefix.length)) || 'index.html';
