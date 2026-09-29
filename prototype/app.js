@@ -852,6 +852,21 @@ async function addMemoryComment(project, itemId, body) {
   await openProject(latest);
 }
 
+async function updateMemoryItemTitle(project, itemId, nextTitle) {
+  const title = nextTitle.trim();
+  if (!title) throw new Error('Give this photo a name.');
+  const latest = await latestRemoteProject(project);
+  const item = latest.memoryItems?.find(entry => entry.id === itemId);
+  if (!item || item.type !== 'photo') throw new Error('That photo could not be found. Refresh and try again.');
+  item.title = title;
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
 function appendDiscussion(container, comments, emptyText) {
   if (!comments?.length) {
     const empty = document.createElement('p');
@@ -1004,6 +1019,60 @@ function renderMemoryBoxProject(project) {
     const byline = document.createElement('p');
     byline.textContent = item.artists || '';
     heading.append(eyebrow, title, byline);
+    if (item.type === 'photo') {
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'memory-edit-name';
+      editButton.textContent = '✎';
+      editButton.setAttribute('aria-label', `Rename ${item.title || `photo ${index + 1}`}`);
+      const editor = document.createElement('form');
+      editor.className = 'memory-name-editor';
+      editor.hidden = true;
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = item.title || '';
+      nameInput.maxLength = 120;
+      nameInput.setAttribute('aria-label', 'Photo name');
+      const save = document.createElement('button');
+      save.type = 'submit';
+      save.textContent = 'Save';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.textContent = 'Cancel';
+      const editStatus = document.createElement('p');
+      editStatus.className = 'form-message memory-name-status';
+      editor.append(nameInput, save, cancel, editStatus);
+      editButton.addEventListener('click', () => {
+        title.hidden = true;
+        editButton.hidden = true;
+        editor.hidden = false;
+        nameInput.focus();
+        nameInput.select();
+      });
+      cancel.addEventListener('click', () => {
+        editor.hidden = true;
+        title.hidden = false;
+        editButton.hidden = false;
+        editStatus.textContent = '';
+      });
+      nameInput.addEventListener('keydown', event => {
+        if (event.key === 'Escape') cancel.click();
+      });
+      editor.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (!nameInput.value.trim()) return nameInput.focus();
+        save.disabled = true;
+        cancel.disabled = true;
+        editStatus.textContent = 'Saving…';
+        try { await updateMemoryItemTitle(project, item.id, nameInput.value); }
+        catch (error) {
+          editStatus.textContent = error.message || 'The photo name could not be saved.';
+          save.disabled = false;
+          cancel.disabled = false;
+        }
+      });
+      heading.append(editButton, editor);
+    }
     if (item.type === 'song' && item.spotifyId) {
       const play = document.createElement('button');
       play.type = 'button';
