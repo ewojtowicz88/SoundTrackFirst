@@ -1,7 +1,7 @@
 {
   "name": "SountrackFirst",
   "short_name": "SountrackFirst",
-  "description": "Create and collaborate on Bookclubs, Memory Boxes, and Score to Scene projects.",
+  "description": "Create and collaborate on Bookclubs, Memory Boxes, Art Galleries, and Score to Scene projects.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

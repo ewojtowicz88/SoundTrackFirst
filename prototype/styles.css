@@ -22,9 +22,9 @@ body { color: var(--foreground); }
   .app-shell { min-height: 100dvh; }
   .app-header { padding-top: max(14px, env(safe-area-inset-top)); }
 }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { color: inherit; cursor: pointer; }
-button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
 [hidden] { display: none !important; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
@@ -55,6 +55,8 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory .type-badge { overflow: hidden; color: #221f1a; background: var(--ivory); }
 .score .type-badge, .recent-badge { color: #eef6ff; background: var(--blue); }
 .score .type-badge, .recent-badge.score { overflow: hidden; background: #0b0e14; }
+.art-gallery .type-badge, .recent-badge.art-gallery { border: 1px solid #a9855a; color: #f0d19c; background: radial-gradient(circle at 35% 30%, #76552f, #241a13 68%); }
+.art-gallery .type-badge svg, .recent-badge.art-gallery svg { stroke: currentColor; }
 .card-copy { min-width: 0; }
 .card-copy strong, .recent-copy strong { display: block; font: 400 18px/1.25 "Libre Baskerville", Georgia, serif; letter-spacing: -.025em; }
 .card-copy small, .recent-copy small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; }
@@ -172,6 +174,25 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory-add-row input { min-width: 0; }
 .memory-add-row button { padding: 9px 11px; border: 1px solid var(--gold); border-radius: 8px; background: #30271e; color: var(--gold-bright); font-size: 10px; font-weight: 700; }
 .memory-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.art-search-controls { margin-top: 18px; }
+.art-search-controls > label, .memory-art-search + label { display: block; margin: 10px 0 6px; color: var(--gold-bright); font-size: 10px; font-weight: 700; }
+.art-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.art-search-row input, .art-search-controls select, .memory-art-search input, .memory-art-search select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #55483a; border-radius: 9px; background: #211d19; color: var(--foreground); }
+.art-search-row button, .memory-art-search > button { min-width: 78px; padding: 9px 12px; border: 1px solid var(--gold); border-radius: 9px; background: #30271e; color: var(--gold-bright); font-size: 11px; font-weight: 700; }
+.memory-art-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.memory-art-search .art-search-results { grid-column: 1 / -1; }
+.art-search-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+.art-result-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid #4b4034; border-radius: 11px; background: #211d19; text-align: left; }
+.art-result-card:hover, .art-result-card.selected { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.art-result-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #0e0c0a; }
+.art-result-card > span { display: block; padding: 9px; }
+.art-result-card strong, .art-result-card small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.art-result-card strong { font: 400 11px/1.35 "Libre Baskerville", Georgia, serif; }
+.art-result-card small { margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.art-search-empty { grid-column: 1 / -1; margin: 3px 0; color: var(--muted); font-size: 11px; }
+.project-screen[data-type="Art Gallery"] .project-playlist,
+.project-screen[data-type="Art Gallery"] .playlist-credit,
+.project-screen[data-type="Art Gallery"] .playlist-credit a { color: var(--gold-bright); }
 .memory-card { overflow: hidden; border: 1px solid #443a30; border-radius: 14px; background: var(--surface); }
 .memory-top { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 13px; padding: 13px; border-bottom: 1px solid #3e362d; }
 .memory-media { width: 90px; height: 90px; border-radius: 9px; object-fit: cover; background: #15120f; }

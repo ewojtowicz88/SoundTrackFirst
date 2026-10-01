@@ -11,7 +11,7 @@ const formats = {
   'Memory Box': {
     icon: '<img src="assets/memorybox-icon.jpeg" alt="">',
     className: 'memory',
-    description: 'Collect photos, audiobooks, songs, playlists, and memories with the people who were there.',
+    description: 'Collect photos, art, audiobooks, songs, playlists, and memories with the people who were there.',
     sourceLabel: 'Choose what to add first',
     sourcePlaceholder: 'https://open.spotify.com/playlist/… or /track/…',
     sourceHelp: 'Start with one item. You can add any other item type after the Memory Box is created.',
@@ -25,6 +25,15 @@ const formats = {
     sourcePlaceholder: 'https://open.spotify.com/playlist/…',
     sourceHelp: 'Paste the Spotify playlist that will become the score for your scenes.',
     lookupLabel: 'Find this playlist'
+  },
+  'Art Gallery': {
+    icon: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 38h32M12 38V18l12-8 12 8v20M18 34V22h12v12M7 18h34"/></svg>',
+    className: 'art-gallery',
+    description: 'Search The Met collection, curate works of art, and discuss them with your collaborators.',
+    sourceLabel: 'Search The Met collection',
+    sourcePlaceholder: 'Artwork, artist, culture, or subject',
+    sourceHelp: 'Search for a work of art to begin your gallery.',
+    lookupLabel: 'Search artwork'
   }
 };
 
@@ -56,6 +65,11 @@ const sourceLinkControls = document.querySelector('#source-link-controls');
 const memoryPhotoSetup = document.querySelector('#memory-photo-setup');
 const memoryFirstPhoto = document.querySelector('#memory-first-photo');
 const memoryFirstPhotoName = document.querySelector('#memory-first-photo-name');
+const artSearchControls = document.querySelector('#art-search-controls');
+const artSearchQuery = document.querySelector('#art-search-query');
+const artSearchField = document.querySelector('#art-search-field');
+const artSearchResults = document.querySelector('#art-search-results');
+const searchArtButton = document.querySelector('#search-art');
 let activeFormat = 'Score to Scene';
 let pendingFormat = null;
 let authMode = 'login';
@@ -272,7 +286,7 @@ function makeProjectCard(project) {
   art.setAttribute('aria-hidden', 'true');
   const source = project.type === 'Bookclub'
     ? project.book
-    : project.type === 'Memory Box'
+    : ['Memory Box', 'Art Gallery'].includes(project.type)
       ? { image: project.memoryCover || project.memoryItems?.find(item => item.image)?.image || '' }
       : project.playlist;
   if (source?.image) {
@@ -287,10 +301,10 @@ function makeProjectCard(project) {
   const detail = document.createElement('small');
   const itemCount = project.type === 'Bookclub'
     ? (project.book?.chapters?.length || 0)
-    : project.type === 'Memory Box'
+    : ['Memory Box', 'Art Gallery'].includes(project.type)
       ? (project.memoryItems?.length || project.playlist?.songs?.length || 0)
       : (project.playlist?.songs?.length || 0);
-  const itemLabel = project.type === 'Bookclub' ? 'chapters' : project.type === 'Memory Box' ? 'memories' : 'tracks';
+  const itemLabel = project.type === 'Bookclub' ? 'chapters' : project.type === 'Art Gallery' ? 'artworks' : project.type === 'Memory Box' ? 'memories' : 'tracks';
   detail.textContent = `${project.type} · ${itemCount} ${itemLabel}`;
   copy.append(title, detail);
   const actions = document.createElement('span');
@@ -476,6 +490,75 @@ function audibleBookToMemoryItem(book) {
     runtimeMinutes: book.runtimeMinutes || 0,
     comments: []
   };
+}
+
+function metObjectToCollectionItem(object) {
+  return {
+    id: crypto.randomUUID(),
+    type: 'art',
+    metObjectId: object.objectID,
+    title: object.title || 'Untitled work',
+    artists: object.artistDisplayName || object.culture || 'Artist unknown',
+    image: object.primaryImageSmall || object.primaryImage || '',
+    fullImage: object.primaryImage || object.primaryImageSmall || '',
+    url: object.objectURL || `https://www.metmuseum.org/art/collection/search/${object.objectID}`,
+    date: object.objectDate || '',
+    medium: object.medium || '',
+    department: object.department || '',
+    culture: object.culture || '',
+    dimensions: object.dimensions || '',
+    creditLine: object.creditLine || '',
+    publicDomain: Boolean(object.isPublicDomain),
+    comments: []
+  };
+}
+
+async function searchMetArtwork(query, field = 'all') {
+  const params = new URLSearchParams({ q: query.trim(), hasImages: 'true', offset: '0', limit: '30' });
+  if (field !== 'all') params.set(field, 'true');
+  const response = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1.1/search?${params}`);
+  if (!response.ok) throw new Error('The Met collection search is temporarily unavailable.');
+  const result = await response.json();
+  const ids = (result.objectIDs || []).slice(0, 18);
+  const objects = await Promise.all(ids.map(async id => {
+    try {
+      const objectResponse = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`);
+      return objectResponse.ok ? objectResponse.json() : null;
+    } catch { return null; }
+  }));
+  return objects.filter(object => object?.primaryImageSmall || object?.primaryImage);
+}
+
+function renderArtResults(container, objects, onSelect) {
+  container.replaceChildren();
+  if (!objects.length) {
+    const empty = document.createElement('p');
+    empty.className = 'art-search-empty';
+    empty.textContent = 'No works with images were found. Try a broader search.';
+    container.append(empty);
+    return;
+  }
+  for (const object of objects) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'art-result-card';
+    const image = document.createElement('img');
+    image.src = object.primaryImageSmall || object.primaryImage;
+    image.alt = '';
+    image.loading = 'lazy';
+    const copy = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = object.title || 'Untitled work';
+    const artist = document.createElement('small');
+    artist.textContent = [object.artistDisplayName || object.culture || 'Artist unknown', object.objectDate].filter(Boolean).join(' · ');
+    copy.append(title, artist);
+    button.append(image, copy);
+    button.addEventListener('click', () => {
+      container.querySelectorAll('button').forEach(card => card.classList.toggle('selected', card === button));
+      onSelect(object);
+    });
+    container.append(button);
+  }
 }
 
 async function importAudibleBook(sourceValue) {
@@ -1046,18 +1129,22 @@ function appendDiscussion(container, comments, emptyText, project, itemId) {
   }
 }
 
-function renderMemoryBoxProject(project) {
+function renderCollectionProject(project) {
+  const isGallery = project.type === 'Art Gallery';
   project.memoryItems ||= (project.playlist?.songs || []).map(songToMemoryItem);
   const items = project.memoryItems;
-  document.querySelector('#project-type').textContent = 'Memory Box';
+  document.querySelector('#project-type').textContent = project.type;
   document.querySelector('#project-title').textContent = project.name;
-  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || 'Photos, audiobooks, songs, and playlists';
-  document.querySelector('#project-source-kind').textContent = 'Shared collection';
+  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || (isGallery ? 'A shared collection of art' : 'Photos, art, audiobooks, songs, and playlists');
+  document.querySelector('#project-source-kind').textContent = isGallery ? 'The Met collection' : 'Shared collection';
   const owner = document.querySelector('#project-owner');
-  owner.textContent = 'Shared memory collection';
-  owner.removeAttribute('href');
+  owner.textContent = isGallery ? 'The Metropolitan Museum of Art' : 'Shared memory collection';
+  if (isGallery) owner.href = 'https://www.metmuseum.org/art/collection';
+  else owner.removeAttribute('href');
   document.querySelector('#project-owner-image').hidden = true;
-  renderLinkedText(document.querySelector('#project-description'), 'Add photos, audiobooks, songs, and playlists, then share the stories, reactions, and memories connected to each one.');
+  renderLinkedText(document.querySelector('#project-description'), isGallery
+    ? 'Search The Met collection, curate works for this gallery, and discuss each one together.'
+    : 'Add photos, art, audiobooks, songs, and playlists, then share the stories, reactions, and memories connected to each one.');
   const cover = document.querySelector('#project-cover');
   const coverUrl = project.memoryCover || project.playlist?.image || items.find(item => item.image)?.image || '';
   cover.hidden = !coverUrl;
@@ -1071,10 +1158,13 @@ function renderMemoryBoxProject(project) {
   addPanel.className = 'memory-add-panel';
   addPanel.hidden = !canContribute(project);
   const addTitle = document.createElement('h2');
-  addTitle.textContent = 'Add to this Memory Box';
+  addTitle.textContent = isGallery ? 'Add artwork to this gallery' : 'Add to this Memory Box';
   const addChoices = document.createElement('div');
   addChoices.className = 'memory-choice-grid memory-add-choices';
-  for (const [type, label, icon] of [['photo', 'Photo', '▧'], ['audiobook', 'Audiobook', '◉'], ['song', 'Song', '♪'], ['playlist', 'Playlist', '♫']]) {
+  const addTypes = isGallery
+    ? [['art', 'Search artwork', '▱']]
+    : [['photo', 'Photo', '▧'], ['audiobook', 'Audiobook', '◉'], ['song', 'Song', '♪'], ['playlist', 'Playlist', '♫'], ['art', 'Art', '▱']];
+  for (const [type, label, icon] of addTypes) {
     const choice = document.createElement('button');
     choice.type = 'button';
     choice.dataset.addType = type;
@@ -1132,10 +1222,34 @@ function renderMemoryBoxProject(project) {
   photoButton.type = 'button';
   photoButton.textContent = 'Choose photo';
   photoRow.append(photoTitle, photoButton, photoInput);
+  const artLabel = document.createElement('label');
+  artLabel.htmlFor = 'collection-art-query';
+  artLabel.textContent = 'Search The Met collection';
+  artLabel.hidden = true;
+  const artRow = document.createElement('div');
+  artRow.className = 'memory-art-search';
+  artRow.hidden = true;
+  const artSearchInput = document.createElement('input');
+  artSearchInput.id = 'collection-art-query';
+  artSearchInput.type = 'search';
+  artSearchInput.placeholder = 'Artwork, artist, culture, or subject';
+  const artField = document.createElement('select');
+  for (const [value, label] of [['all', 'Everything'], ['title', 'Artwork title'], ['artistOrCulture', 'Artist or culture'], ['tags', 'Subject']]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    artField.append(option);
+  }
+  const artSearchButton = document.createElement('button');
+  artSearchButton.type = 'button';
+  artSearchButton.textContent = 'Search';
+  const artResults = document.createElement('div');
+  artResults.className = 'art-search-results';
+  artRow.append(artSearchInput, artField, artSearchButton, artResults);
   const addStatus = document.createElement('p');
   addStatus.className = 'form-message';
   addStatus.setAttribute('role', 'status');
-  addPanel.append(addTitle, addChoices, spotifyLabel, spotifyRow, audibleLabel, audibleRow, photoLabel, photoRow, addStatus);
+  addPanel.append(addTitle, addChoices, spotifyLabel, spotifyRow, audibleLabel, audibleRow, photoLabel, photoRow, artLabel, artRow, addStatus);
   sceneList.append(addPanel);
 
   let selectedAddType = null;
@@ -1149,12 +1263,39 @@ function renderMemoryBoxProject(project) {
     audibleRow.hidden = selectedAddType !== 'audiobook';
     photoLabel.hidden = selectedAddType !== 'photo';
     photoRow.hidden = selectedAddType !== 'photo';
+    artLabel.hidden = selectedAddType !== 'art';
+    artRow.hidden = selectedAddType !== 'art';
     spotifyLabel.textContent = selectedAddType === 'song' ? 'Spotify song link' : 'Spotify playlist link';
     spotifyInput.placeholder = selectedAddType === 'song' ? 'Paste a Spotify song link' : 'Paste a Spotify playlist link';
     spotifyButton.textContent = selectedAddType === 'song' ? 'Add song' : 'Add playlist';
     addStatus.textContent = '';
-    (selectedAddType === 'photo' ? photoTitle : selectedAddType === 'audiobook' ? audibleInput : spotifyInput).focus();
+    (selectedAddType === 'photo' ? photoTitle : selectedAddType === 'audiobook' ? audibleInput : selectedAddType === 'art' ? artSearchInput : spotifyInput).focus();
   }));
+
+  artSearchButton.addEventListener('click', async () => {
+    const query = artSearchInput.value.trim();
+    if (!query) return artSearchInput.focus();
+    artSearchButton.disabled = true;
+    addStatus.textContent = 'Searching The Met…';
+    artResults.replaceChildren();
+    try {
+      const objects = await searchMetArtwork(query, artField.value);
+      addStatus.textContent = objects.length ? 'Choose a work to add.' : '';
+      renderArtResults(artResults, objects, async object => {
+        addStatus.textContent = 'Adding artwork…';
+        try { await saveMemoryItems(project, [metObjectToCollectionItem(object)]); }
+        catch (error) { addStatus.textContent = error.message || 'That artwork could not be added.'; }
+      });
+    } catch (error) {
+      addStatus.textContent = error.message || 'Artwork search failed. Try again.';
+    } finally {
+      artSearchButton.disabled = false;
+    }
+  });
+  artSearchInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); artSearchButton.click(); }
+  });
+  if (isGallery) addChoices.querySelector('button')?.click();
 
   spotifyButton.addEventListener('click', async () => {
     const url = spotifyInput.value.trim();
@@ -1224,17 +1365,19 @@ function renderMemoryBoxProject(project) {
     card.className = 'memory-card';
     const media = document.createElement('img');
     media.className = 'memory-media';
-    media.src = item.image || 'assets/memorybox-icon.jpeg';
+    media.src = item.image || (isGallery ? 'assets/memorybox-icon.jpeg' : 'assets/memorybox-icon.jpeg');
     media.alt = item.type === 'photo' ? item.title : '';
     media.loading = 'lazy';
     const heading = document.createElement('div');
     heading.className = 'memory-heading';
     const eyebrow = document.createElement('small');
-    eyebrow.textContent = item.type === 'photo' ? 'Photo memory' : item.type === 'audiobook' ? 'Audible audiobook' : 'Spotify song';
+    eyebrow.textContent = item.type === 'photo' ? 'Photo memory' : item.type === 'audiobook' ? 'Audible audiobook' : item.type === 'art' ? 'Work of art · The Met' : 'Spotify song';
     const title = document.createElement('h2');
     title.textContent = item.title || `Memory ${index + 1}`;
     const byline = document.createElement('p');
-    byline.textContent = item.type === 'audiobook' && item.narrators
+    byline.textContent = item.type === 'art'
+      ? [item.artists, item.date, item.medium].filter(Boolean).join(' · ')
+      : item.type === 'audiobook' && item.narrators
       ? `${item.artists || 'Author unavailable'} · Narrated by ${item.narrators}`
       : (item.artists || '');
     heading.append(eyebrow, title, byline);
@@ -1245,6 +1388,15 @@ function renderMemoryBoxProject(project) {
       sourceLink.target = '_blank';
       sourceLink.rel = 'noopener';
       sourceLink.textContent = 'Open in Audible';
+      heading.append(sourceLink);
+    }
+    if (item.type === 'art' && item.url) {
+      const sourceLink = document.createElement('a');
+      sourceLink.className = 'memory-source-link';
+      sourceLink.href = item.url;
+      sourceLink.target = '_blank';
+      sourceLink.rel = 'noopener';
+      sourceLink.textContent = 'View at The Met';
       heading.append(sourceLink);
     }
     if (canEditProjectContent(project)) {
@@ -1328,12 +1480,12 @@ function renderMemoryBoxProject(project) {
     top.append(media, heading);
     const discussion = document.createElement('div');
     discussion.className = 'chapter-discussion';
-    appendDiscussion(discussion, item.comments, 'Be the first to share the story behind this memory.', project, item.id);
+    appendDiscussion(discussion, item.comments, isGallery || item.type === 'art' ? 'Be the first to share what this artwork makes you think or feel.' : 'Be the first to share the story behind this memory.', project, item.id);
     const composer = document.createElement('form');
     composer.className = 'chapter-composer';
     const input = document.createElement('textarea');
     input.rows = 2;
-    input.placeholder = 'Share a memory, thought, or reaction…';
+    input.placeholder = isGallery || item.type === 'art' ? 'Share a thought, interpretation, or reaction…' : 'Share a memory, thought, or reaction…';
     input.setAttribute('aria-label', `Comment on ${item.title}`);
     const button = document.createElement('button');
     button.type = 'submit';
@@ -1401,7 +1553,7 @@ async function openProject(project) {
     renderBookclubProject(project);
     return;
   }
-  if (project.type === 'Memory Box') {
+  if (['Memory Box', 'Art Gallery'].includes(project.type)) {
     if (!project.memoryItems && project.playlist?.songs?.length) {
       project.memoryItems = project.playlist.songs.map(songToMemoryItem);
       project.memoryCover = project.playlist.image || '';
@@ -1418,7 +1570,7 @@ async function openProject(project) {
     document.querySelector('#collaborator-options').replaceChildren();
     document.querySelector('#collaborator-message').textContent = '';
     renderCollaborators(project);
-    renderMemoryBoxProject(project);
+    renderCollectionProject(project);
     return;
   }
   if (canEditProjectContent(project) && project.playlist?.songs?.length && project.playlist.metadataVersion !== 3 && project.sourceUrl) {
@@ -1582,7 +1734,7 @@ function showProfile() {
   const itemCount = projects.reduce((total, project) => total
     + (project.type === 'Bookclub'
       ? (project.book?.chapters?.length || 0)
-      : project.type === 'Memory Box'
+      : ['Memory Box', 'Art Gallery'].includes(project.type)
         ? (project.memoryItems?.length || project.playlist?.songs?.length || 0)
         : (project.playlist?.songs?.length || 0)), 0);
   const initials = session.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
@@ -1669,17 +1821,20 @@ function openFormat(name) {
   formMessage.textContent = '';
   const sourceArt = document.querySelector('#source-art');
   sourceArt.style.backgroundImage = '';
-  sourceArt.textContent = name === 'Bookclub' ? 'A' : '♫';
+  sourceArt.textContent = name === 'Bookclub' ? 'A' : name === 'Art Gallery' ? '▱' : '♫';
   metadataPreview.hidden = true;
   memorySourceChoices.hidden = name !== 'Memory Box';
   memorySourceChoices.querySelectorAll('button').forEach(button => button.classList.remove('active'));
-  sourceLinkControls.hidden = name === 'Memory Box';
+  sourceLinkControls.hidden = name === 'Memory Box' || name === 'Art Gallery';
   memoryPhotoSetup.hidden = true;
+  artSearchControls.hidden = name !== 'Art Gallery';
+  artSearchQuery.value = '';
+  artSearchResults.replaceChildren();
   nameStep.hidden = true;
   nameStep.querySelector('.primary-button').textContent = `Create ${name}`;
   createScreen.hidden = true;
   setupScreen.hidden = false;
-  (name === 'Memory Box' ? memorySourceChoices.querySelector('button') : sourceUrl).focus();
+  (name === 'Memory Box' ? memorySourceChoices.querySelector('button') : name === 'Art Gallery' ? artSearchQuery : sourceUrl).focus();
 }
 
 function chooseMemorySource(type) {
@@ -1693,10 +1848,18 @@ function chooseMemorySource(type) {
   formMessage.textContent = '';
   memorySourceChoices.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.memorySource === type));
   const photo = type === 'photo';
-  sourceLinkControls.hidden = photo;
+  const art = type === 'art';
+  sourceLinkControls.hidden = photo || art;
   memoryPhotoSetup.hidden = !photo;
+  artSearchControls.hidden = !art;
   if (photo) {
     memoryFirstPhotoName.focus();
+    return;
+  }
+  if (art) {
+    artSearchQuery.value = '';
+    artSearchResults.replaceChildren();
+    artSearchQuery.focus();
     return;
   }
   const audiobook = type === 'audiobook';
@@ -1708,6 +1871,49 @@ function chooseMemorySource(type) {
 }
 
 memorySourceChoices.querySelectorAll('button').forEach(button => button.addEventListener('click', () => chooseMemorySource(button.dataset.memorySource)));
+
+async function runSetupArtSearch() {
+  const query = artSearchQuery.value.trim();
+  if (!query) return artSearchQuery.focus();
+  searchArtButton.disabled = true;
+  searchArtButton.textContent = 'Searching…';
+  formMessage.textContent = 'Searching The Met collection…';
+  artSearchResults.replaceChildren();
+  try {
+    const objects = await searchMetArtwork(query, artSearchField.value);
+    formMessage.textContent = objects.length ? 'Choose a work of art.' : '';
+    renderArtResults(artSearchResults, objects, object => {
+      const item = metObjectToCollectionItem(object);
+      resolvedSource = { name: item.title, image: item.image, owner: item.artists, items: [item] };
+      document.querySelector('#preview-label').textContent = 'The Metropolitan Museum of Art';
+      document.querySelector('#preview-title').textContent = item.title;
+      document.querySelector('#preview-byline').textContent = [item.artists, item.date].filter(Boolean).join(' · ');
+      document.querySelector('#preview-meta').textContent = item.medium || item.department || 'Artwork selected';
+      const art = document.querySelector('#source-art');
+      art.textContent = '';
+      art.style.backgroundImage = `url("${item.image}")`;
+      art.style.backgroundSize = 'cover';
+      art.style.backgroundPosition = 'center';
+      metadataPreview.hidden = false;
+      nameStep.hidden = false;
+      nameStep.querySelector('.primary-button').textContent = `Create ${activeFormat}`;
+      if (!document.querySelector('#creation-name').value.trim()) {
+        document.querySelector('#creation-name').value = activeFormat === 'Art Gallery' ? `${item.title} Gallery` : '';
+      }
+      formMessage.textContent = '';
+    });
+  } catch (error) {
+    formMessage.textContent = error.message || 'Artwork search failed. Try again.';
+  } finally {
+    searchArtButton.disabled = false;
+    searchArtButton.textContent = 'Search';
+  }
+}
+
+searchArtButton.addEventListener('click', runSetupArtSearch);
+artSearchQuery.addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); runSetupArtSearch(); }
+});
 
 memoryFirstPhoto.addEventListener('change', () => {
   const file = memoryFirstPhoto.files?.[0];
@@ -1724,7 +1930,7 @@ memoryFirstPhoto.addEventListener('change', () => {
   document.querySelector('#preview-label').textContent = 'Photo';
   document.querySelector('#preview-title').textContent = title;
   document.querySelector('#preview-byline').textContent = 'Ready for your Memory Box';
-  document.querySelector('#preview-meta').textContent = 'You can add more photos, audiobooks, songs, and playlists next.';
+  document.querySelector('#preview-meta').textContent = 'You can add more photos, art, audiobooks, songs, and playlists next.';
   const art = document.querySelector('#source-art');
   art.textContent = '';
   art.style.backgroundImage = `url("${resolvedSource.image}")`;
@@ -1930,9 +2136,11 @@ document.querySelector('#create-item').addEventListener('click', async () => {
   const name = nameInput.value.trim();
   if (metadataPreview.hidden) {
     formMessage.textContent = activeFormat === 'Memory Box'
-      ? 'Choose and add the first photo, audiobook, song, or playlist.'
-      : `Find the ${activeFormat === 'Bookclub' ? 'book' : 'playlist'} before creating this item.`;
-    (activeFormat === 'Memory Box' ? memorySourceChoices.querySelector('button') : sourceUrl).focus();
+      ? 'Choose and add the first photo, artwork, audiobook, song, or playlist.'
+      : activeFormat === 'Art Gallery'
+        ? 'Search for and choose a work of art before creating this gallery.'
+        : `Find the ${activeFormat === 'Bookclub' ? 'book' : 'playlist'} before creating this item.`;
+    (activeFormat === 'Memory Box' ? memorySourceChoices.querySelector('button') : activeFormat === 'Art Gallery' ? artSearchQuery : sourceUrl).focus();
     return;
   }
   if (!name) {
@@ -1950,7 +2158,7 @@ document.querySelector('#create-item').addEventListener('click', async () => {
     ownerEmail: session.username,
     collaborators: [],
     collaboratorRoles: {},
-    sourceUrl: memorySourceType === 'photo' ? '' : sourceUrl.value.trim(),
+    sourceUrl: memorySourceType === 'photo' || memorySourceType === 'art' || activeFormat === 'Art Gallery' ? '' : sourceUrl.value.trim(),
     createdAt: new Date().toISOString(),
     playlist: activeFormat === 'Score to Scene' && resolvedSource ? {
       ...resolvedSource,
@@ -1962,9 +2170,9 @@ document.querySelector('#create-item').addEventListener('click', async () => {
       metadataVersion: 1,
       chapters: (resolvedSource.chapters || []).map((chapter, index) => ({ ...chapter, position: index + 1, comments: [] }))
     } : null,
-    memoryItems: activeFormat === 'Memory Box' ? (resolvedSource?.items || []) : null,
-    memoryCover: activeFormat === 'Memory Box' ? (resolvedSource?.image || '') : '',
-    memorySourceName: activeFormat === 'Memory Box' ? (resolvedSource?.name || '') : ''
+    memoryItems: ['Memory Box', 'Art Gallery'].includes(activeFormat) ? (resolvedSource?.items || []) : null,
+    memoryCover: ['Memory Box', 'Art Gallery'].includes(activeFormat) ? (resolvedSource?.image || '') : '',
+    memorySourceName: ['Memory Box', 'Art Gallery'].includes(activeFormat) ? (resolvedSource?.name || '') : ''
   };
   const createButton = document.querySelector('#create-item');
   createButton.disabled = true;
@@ -1991,7 +2199,7 @@ document.querySelector('#create-item').addEventListener('click', async () => {
   syncProject(project);
   nameInput.value = '';
   setupScreen.hidden = true;
-  if (['Score to Scene', 'Bookclub', 'Memory Box'].includes(activeFormat)) openProject(project);
+  if (['Score to Scene', 'Bookclub', 'Memory Box', 'Art Gallery'].includes(activeFormat)) openProject(project);
   else createScreen.hidden = false;
   renderProjects();
   createButton.disabled = false;
