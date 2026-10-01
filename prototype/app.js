@@ -11,11 +11,11 @@ const formats = {
   'Memory Box': {
     icon: '<img src="assets/memorybox-icon.jpeg" alt="">',
     className: 'memory',
-    description: 'Collect songs, photographs, notes, and memories with the people who were there.',
-    sourceLabel: 'Spotify playlist or song link (optional)',
+    description: 'Collect photos, audiobooks, songs, playlists, and memories with the people who were there.',
+    sourceLabel: 'Choose what to add first',
     sourcePlaceholder: 'https://open.spotify.com/playlist/… or /track/…',
-    sourceHelp: 'Start with a playlist, one song, or an empty Memory Box. You can add more songs and photos later.',
-    lookupLabel: 'Add Spotify music'
+    sourceHelp: 'Start with one item. You can add any other item type after the Memory Box is created.',
+    lookupLabel: 'Add item'
   },
   'Score to Scene': {
     icon: '<img src="assets/score-to-scene-icon.jpeg" alt="">',
@@ -51,16 +51,53 @@ const lookupSource = document.querySelector('#lookup-source');
 const metadataPreview = document.querySelector('#metadata-preview');
 const nameStep = document.querySelector('#name-step');
 const formMessage = document.querySelector('#form-message');
+const memorySourceChoices = document.querySelector('#memory-source-choices');
+const sourceLinkControls = document.querySelector('#source-link-controls');
+const memoryPhotoSetup = document.querySelector('#memory-photo-setup');
+const memoryFirstPhoto = document.querySelector('#memory-first-photo');
+const memoryFirstPhotoName = document.querySelector('#memory-first-photo-name');
 let activeFormat = 'Score to Scene';
 let pendingFormat = null;
 let authMode = 'login';
 let resolvedSource = null;
+let memorySourceType = null;
+let memoryPhotoFile = null;
 let activeProject = null;
 let spotifyIframeApi = null;
 let spotifyEmbedController = null;
 let pendingTrackId = null;
 let activeTrackUri = null;
 let correctingSpotifyPlayback = false;
+
+const collaboratorRoleLabels = {
+  viewer: 'Viewer',
+  collaborator: 'Collaborator',
+  editor: 'Editor'
+};
+
+function normalizeCollaboratorRoles(project) {
+  project.collaboratorRoles ||= {};
+  for (const email of project.collaborators || []) {
+    if (!collaboratorRoleLabels[project.collaboratorRoles[email]]) project.collaboratorRoles[email] = 'editor';
+  }
+  return project.collaboratorRoles;
+}
+
+function projectRole(project) {
+  const email = getSession()?.username;
+  if (!email || !project) return null;
+  if (project.ownerEmail === email) return 'owner';
+  normalizeCollaboratorRoles(project);
+  return project.collaboratorRoles[email] || null;
+}
+
+function canContribute(project) {
+  return ['owner', 'editor', 'collaborator'].includes(projectRole(project));
+}
+
+function canEditProjectContent(project) {
+  return ['owner', 'editor'].includes(projectRole(project));
+}
 
 window.onSpotifyIframeApiReady = IFrameAPI => {
   spotifyIframeApi = IFrameAPI;
@@ -262,6 +299,7 @@ function makeProjectCard(project) {
   remove.className = 'card-delete';
   remove.type = 'button';
   remove.textContent = '×';
+  remove.hidden = project.ownerEmail !== getSession()?.username;
   remove.setAttribute('aria-label', `Delete ${project.name}`);
   remove.addEventListener('click', event => {
     event.stopPropagation();
@@ -425,6 +463,21 @@ function songToMemoryItem(song) {
   };
 }
 
+function audibleBookToMemoryItem(book) {
+  return {
+    id: crypto.randomUUID(),
+    type: 'audiobook',
+    title: book.name,
+    artists: (book.authors || []).join(', ') || 'Author unavailable',
+    narrators: (book.narrators || []).join(', '),
+    image: book.image || '',
+    url: book.url || '',
+    description: book.description || '',
+    runtimeMinutes: book.runtimeMinutes || 0,
+    comments: []
+  };
+}
+
 async function importAudibleBook(sourceValue) {
   const asin = audibleAsin(sourceValue);
   if (!asin) throw new Error('Invalid Audible book link');
@@ -547,7 +600,7 @@ function saveScene(projectId, songIndex, scene) {
   if (!session) return;
   const projects = getProjects();
   const project = (projects[session.username] || []).find(item => item.id === projectId);
-  if (!project?.playlist?.songs?.[songIndex]) return;
+  if (!project?.playlist?.songs?.[songIndex] || !canEditProjectContent(project)) return;
   project.playlist.songs[songIndex].scene = scene;
   project.updatedAt = new Date().toISOString();
   syncProject(project);
@@ -557,6 +610,7 @@ function revokeCollaborator(project, email) {
   const session = getSession();
   if (!session || project.ownerEmail !== session.username) return;
   project.collaborators = (project.collaborators || []).filter(item => item !== email);
+  if (project.collaboratorRoles) delete project.collaboratorRoles[email];
   project.updatedAt = new Date().toISOString();
   const projects = getProjects();
   projects[email] = (projects[email] || []).filter(item => item.id !== project.id);
@@ -570,17 +624,44 @@ function renderCollaborators(project) {
   const users = getUsers();
   const list = document.querySelector('#collaborator-list');
   list.replaceChildren();
+  normalizeCollaboratorRoles(project);
   for (const email of project.collaborators || []) {
     const chip = document.createElement('span');
     chip.className = 'collaborator-chip';
-    chip.append(document.createTextNode(users[email]?.displayName || email));
+    const identity = document.createElement('span');
+    identity.className = 'collaborator-identity';
+    const name = document.createElement('strong');
+    name.textContent = users[email]?.displayName || email;
+    const address = document.createElement('small');
+    address.textContent = email;
+    identity.append(name, address);
+    chip.append(identity);
     if (project.ownerEmail === session?.username) {
+      const role = document.createElement('select');
+      role.setAttribute('aria-label', `Access level for ${email}`);
+      for (const [value, label] of Object.entries(collaboratorRoleLabels)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        option.selected = project.collaboratorRoles[email] === value;
+        role.append(option);
+      }
+      role.addEventListener('change', () => {
+        project.collaboratorRoles[email] = role.value;
+        project.updatedAt = new Date().toISOString();
+        syncProject(project);
+      });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
       remove.setAttribute('aria-label', `Revoke access for ${email}`);
       remove.addEventListener('click', () => revokeCollaborator(project, email));
-      chip.append(remove);
+      chip.append(role, remove);
+    } else {
+      const badge = document.createElement('small');
+      badge.className = 'collaborator-role-badge';
+      badge.textContent = collaboratorRoleLabels[project.collaboratorRoles[email]];
+      chip.append(badge);
     }
     list.append(chip);
   }
@@ -601,15 +682,19 @@ function inviteCollaborator(email) {
   }
   activeProject.collaborators ||= [];
   activeProject.collaborators.push(normalized);
+  normalizeCollaboratorRoles(activeProject);
+  const selectedRole = document.querySelector('#collaborator-role').value;
+  activeProject.collaboratorRoles[normalized] = collaboratorRoleLabels[selectedRole] ? selectedRole : 'collaborator';
   activeProject.updatedAt = new Date().toISOString();
   syncProject(activeProject);
   renderCollaborators(activeProject);
   document.querySelector('#collaborator-search').value = '';
   document.querySelector('#collaborator-options').replaceChildren();
   const registered = Boolean(getUsers()[normalized]);
+  const roleLabel = collaboratorRoleLabels[activeProject.collaboratorRoles[normalized]];
   message.textContent = registered
-    ? `${normalized} can now open this creation from their Library.`
-    : `Invitation saved for ${normalized}. It will appear when they create an account with that email.`;
+    ? `${normalized} now has ${roleLabel.toLowerCase()} access.`
+    : `${roleLabel} invitation saved for ${normalized}. It will appear when they create an account with that email.`;
 }
 
 async function renderCollaboratorOptions(query) {
@@ -650,7 +735,7 @@ function closeTitleEditor() {
 }
 
 function saveProjectTitle() {
-  if (!activeProject) return;
+  if (!activeProject || !canEditProjectContent(activeProject)) return;
   const input = document.querySelector('#project-title-input');
   const name = input.value.trim();
   if (!name) {
@@ -679,6 +764,7 @@ async function addBookComment(project, chapterId, body) {
   const session = getSession();
   const message = body.trim();
   if (!session || !message) return;
+  if (!canContribute(project)) throw new Error('Collaborator access is required to comment.');
   let latest = project;
   const { data, error } = await supabaseClient
     .from('projects')
@@ -707,6 +793,55 @@ async function addBookComment(project, chapterId, body) {
   syncProject(latest);
   activeProject = latest;
   await openProject(latest);
+}
+
+async function changeComment(project, containerType, containerId, commentId, action, body = '') {
+  if (!canEditProjectContent(project)) throw new Error('Editor access is required.');
+  const latest = await latestRemoteProject(project);
+  const container = containerType === 'chapter'
+    ? latest.book?.chapters?.find(item => item.id === containerId)
+    : latest.memoryItems?.find(item => item.id === containerId);
+  if (!container) throw new Error('That item could not be found. Refresh and try again.');
+  const index = (container.comments || []).findIndex(comment => comment.id === commentId);
+  if (index < 0) throw new Error('That comment could not be found. Refresh and try again.');
+  if (action === 'delete') container.comments.splice(index, 1);
+  else {
+    const message = body.trim();
+    if (!message) throw new Error('A comment cannot be empty.');
+    container.comments[index].body = message;
+    container.comments[index].editedAt = new Date().toISOString();
+  }
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+function appendCommentControls(post, project, containerType, containerId, comment) {
+  if (!canEditProjectContent(project)) return;
+  const actions = document.createElement('div');
+  actions.className = 'comment-actions';
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.textContent = 'Edit';
+  edit.addEventListener('click', async () => {
+    const next = window.prompt('Edit this comment', comment.body);
+    if (next === null || next.trim() === comment.body) return;
+    try { await changeComment(project, containerType, containerId, comment.id, 'edit', next); }
+    catch (error) { window.alert(error.message || 'The comment could not be edited.'); }
+  });
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Delete';
+  remove.addEventListener('click', async () => {
+    if (!window.confirm('Delete this comment?')) return;
+    try { await changeComment(project, containerType, containerId, comment.id, 'delete'); }
+    catch (error) { window.alert(error.message || 'The comment could not be deleted.'); }
+  });
+  actions.append(edit, remove);
+  post.append(actions);
 }
 
 function renderBookclubProject(project) {
@@ -766,6 +901,7 @@ function renderBookclubProject(project) {
       const copy = document.createElement('p');
       copy.textContent = comment.body;
       post.append(meta, copy);
+      appendCommentControls(post, project, 'chapter', chapter.id, comment);
       discussion.append(post);
     }
 
@@ -798,6 +934,7 @@ function renderBookclubProject(project) {
         button.disabled = false;
       }
     });
+    composer.hidden = !canContribute(project);
     card.append(heading, discussion, composer);
     sceneList.append(card);
   });
@@ -815,6 +952,7 @@ async function latestRemoteProject(project) {
 }
 
 async function saveMemoryItems(project, additions) {
+  if (!canContribute(project)) throw new Error('Collaborator access is required to add items.');
   const latest = await latestRemoteProject(project);
   latest.memoryItems ||= [];
   for (const item of additions) {
@@ -833,6 +971,7 @@ async function addMemoryComment(project, itemId, body) {
   const session = getSession();
   const message = body.trim();
   if (!session || !message) return;
+  if (!canContribute(project)) throw new Error('Collaborator access is required to comment.');
   const latest = await latestRemoteProject(project);
   const item = latest.memoryItems?.find(entry => entry.id === itemId);
   if (!item) throw new Error('That memory could not be found. Refresh and try again.');
@@ -853,11 +992,12 @@ async function addMemoryComment(project, itemId, body) {
 }
 
 async function updateMemoryItemTitle(project, itemId, nextTitle) {
+  if (!canEditProjectContent(project)) throw new Error('Editor access is required.');
   const title = nextTitle.trim();
-  if (!title) throw new Error('Give this photo a name.');
+  if (!title) throw new Error('Give this item a name.');
   const latest = await latestRemoteProject(project);
   const item = latest.memoryItems?.find(entry => entry.id === itemId);
-  if (!item || item.type !== 'photo') throw new Error('That photo could not be found. Refresh and try again.');
+  if (!item) throw new Error('That item could not be found. Refresh and try again.');
   item.title = title;
   latest.updatedAt = new Date().toISOString();
   const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
@@ -867,7 +1007,21 @@ async function updateMemoryItemTitle(project, itemId, nextTitle) {
   await openProject(latest);
 }
 
-function appendDiscussion(container, comments, emptyText) {
+async function removeMemoryItem(project, itemId) {
+  if (!canEditProjectContent(project)) throw new Error('Editor access is required.');
+  const latest = await latestRemoteProject(project);
+  const index = (latest.memoryItems || []).findIndex(item => item.id === itemId);
+  if (index < 0) throw new Error('That item could not be found. Refresh and try again.');
+  latest.memoryItems.splice(index, 1);
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+function appendDiscussion(container, comments, emptyText, project, itemId) {
   if (!comments?.length) {
     const empty = document.createElement('p');
     empty.className = 'discussion-empty';
@@ -887,6 +1041,7 @@ function appendDiscussion(container, comments, emptyText) {
     const copy = document.createElement('p');
     copy.textContent = comment.body;
     post.append(meta, copy);
+    appendCommentControls(post, project, 'memory', itemId, comment);
     container.append(post);
   }
 }
@@ -896,13 +1051,13 @@ function renderMemoryBoxProject(project) {
   const items = project.memoryItems;
   document.querySelector('#project-type').textContent = 'Memory Box';
   document.querySelector('#project-title').textContent = project.name;
-  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || 'Songs, photos, and shared memories';
+  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || 'Photos, audiobooks, songs, and playlists';
   document.querySelector('#project-source-kind').textContent = 'Shared collection';
   const owner = document.querySelector('#project-owner');
-  owner.textContent = 'Songs and photos';
+  owner.textContent = 'Shared memory collection';
   owner.removeAttribute('href');
   document.querySelector('#project-owner-image').hidden = true;
-  renderLinkedText(document.querySelector('#project-description'), 'Add music and photographs, then share the stories, reactions, and memories connected to each one.');
+  renderLinkedText(document.querySelector('#project-description'), 'Add photos, audiobooks, songs, and playlists, then share the stories, reactions, and memories connected to each one.');
   const cover = document.querySelector('#project-cover');
   const coverUrl = project.memoryCover || project.playlist?.image || items.find(item => item.image)?.image || '';
   cover.hidden = !coverUrl;
@@ -914,27 +1069,57 @@ function renderMemoryBoxProject(project) {
 
   const addPanel = document.createElement('section');
   addPanel.className = 'memory-add-panel';
+  addPanel.hidden = !canContribute(project);
   const addTitle = document.createElement('h2');
   addTitle.textContent = 'Add to this Memory Box';
+  const addChoices = document.createElement('div');
+  addChoices.className = 'memory-choice-grid memory-add-choices';
+  for (const [type, label, icon] of [['photo', 'Photo', '▧'], ['audiobook', 'Audiobook', '◉'], ['song', 'Song', '♪'], ['playlist', 'Playlist', '♫']]) {
+    const choice = document.createElement('button');
+    choice.type = 'button';
+    choice.dataset.addType = type;
+    choice.innerHTML = `<span aria-hidden="true">${icon}</span>${label}`;
+    addChoices.append(choice);
+  }
   const spotifyLabel = document.createElement('label');
   spotifyLabel.htmlFor = 'memory-spotify-url';
-  spotifyLabel.textContent = 'Spotify playlist or song link';
+  spotifyLabel.textContent = 'Spotify link';
+  spotifyLabel.hidden = true;
   const spotifyRow = document.createElement('div');
   spotifyRow.className = 'memory-add-row';
+  spotifyRow.hidden = true;
   const spotifyInput = document.createElement('input');
   spotifyInput.id = 'memory-spotify-url';
   spotifyInput.type = 'url';
   spotifyInput.inputMode = 'url';
-  spotifyInput.placeholder = 'Paste a Spotify playlist or track link';
+  spotifyInput.placeholder = 'Paste a Spotify link';
   const spotifyButton = document.createElement('button');
   spotifyButton.type = 'button';
-  spotifyButton.textContent = 'Add music';
+  spotifyButton.textContent = 'Add';
   spotifyRow.append(spotifyInput, spotifyButton);
+  const audibleLabel = document.createElement('label');
+  audibleLabel.htmlFor = 'memory-audible-url';
+  audibleLabel.textContent = 'Audible audiobook link';
+  audibleLabel.hidden = true;
+  const audibleRow = document.createElement('div');
+  audibleRow.className = 'memory-add-row';
+  audibleRow.hidden = true;
+  const audibleInput = document.createElement('input');
+  audibleInput.id = 'memory-audible-url';
+  audibleInput.type = 'url';
+  audibleInput.inputMode = 'url';
+  audibleInput.placeholder = 'Paste an Audible book link';
+  const audibleButton = document.createElement('button');
+  audibleButton.type = 'button';
+  audibleButton.textContent = 'Add audiobook';
+  audibleRow.append(audibleInput, audibleButton);
   const photoLabel = document.createElement('label');
   photoLabel.htmlFor = 'memory-photo-title';
   photoLabel.textContent = 'Photo';
+  photoLabel.hidden = true;
   const photoRow = document.createElement('div');
   photoRow.className = 'memory-add-row memory-photo-row';
+  photoRow.hidden = true;
   const photoTitle = document.createElement('input');
   photoTitle.id = 'memory-photo-title';
   photoTitle.type = 'text';
@@ -950,8 +1135,26 @@ function renderMemoryBoxProject(project) {
   const addStatus = document.createElement('p');
   addStatus.className = 'form-message';
   addStatus.setAttribute('role', 'status');
-  addPanel.append(addTitle, spotifyLabel, spotifyRow, photoLabel, photoRow, addStatus);
+  addPanel.append(addTitle, addChoices, spotifyLabel, spotifyRow, audibleLabel, audibleRow, photoLabel, photoRow, addStatus);
   sceneList.append(addPanel);
+
+  let selectedAddType = null;
+  addChoices.querySelectorAll('button').forEach(choice => choice.addEventListener('click', () => {
+    selectedAddType = choice.dataset.addType;
+    addChoices.querySelectorAll('button').forEach(button => button.classList.toggle('active', button === choice));
+    const spotifySelected = ['song', 'playlist'].includes(selectedAddType);
+    spotifyLabel.hidden = !spotifySelected;
+    spotifyRow.hidden = !spotifySelected;
+    audibleLabel.hidden = selectedAddType !== 'audiobook';
+    audibleRow.hidden = selectedAddType !== 'audiobook';
+    photoLabel.hidden = selectedAddType !== 'photo';
+    photoRow.hidden = selectedAddType !== 'photo';
+    spotifyLabel.textContent = selectedAddType === 'song' ? 'Spotify song link' : 'Spotify playlist link';
+    spotifyInput.placeholder = selectedAddType === 'song' ? 'Paste a Spotify song link' : 'Paste a Spotify playlist link';
+    spotifyButton.textContent = selectedAddType === 'song' ? 'Add song' : 'Add playlist';
+    addStatus.textContent = '';
+    (selectedAddType === 'photo' ? photoTitle : selectedAddType === 'audiobook' ? audibleInput : spotifyInput).focus();
+  }));
 
   spotifyButton.addEventListener('click', async () => {
     const url = spotifyInput.value.trim();
@@ -961,14 +1164,28 @@ function renderMemoryBoxProject(project) {
     try {
       const playlistId = spotifyPlaylistId(url);
       const trackId = spotifyTrackId(url);
-      if (!playlistId && !trackId) throw new Error('Paste a full Spotify playlist or track link.');
-      const additions = playlistId
+      if (selectedAddType === 'song' && !trackId) throw new Error('Paste a full Spotify song link.');
+      if (selectedAddType === 'playlist' && !playlistId) throw new Error('Paste a full Spotify playlist link.');
+      const additions = selectedAddType === 'playlist'
         ? (await importPlaylist(url)).songs.map(songToMemoryItem)
         : [songToMemoryItem(await importSpotifyTrack(url))];
       await saveMemoryItems(project, additions);
     } catch (error) {
       addStatus.textContent = error.message || 'That Spotify music could not be added.';
       spotifyButton.disabled = false;
+    }
+  });
+
+  audibleButton.addEventListener('click', async () => {
+    const url = audibleInput.value.trim();
+    if (!url) return audibleInput.focus();
+    audibleButton.disabled = true;
+    addStatus.textContent = 'Adding audiobook…';
+    try {
+      await saveMemoryItems(project, [audibleBookToMemoryItem(await importAudibleBook(url))]);
+    } catch (error) {
+      addStatus.textContent = error.message || 'That audiobook could not be added.';
+      audibleButton.disabled = false;
     }
   });
 
@@ -1013,18 +1230,36 @@ function renderMemoryBoxProject(project) {
     const heading = document.createElement('div');
     heading.className = 'memory-heading';
     const eyebrow = document.createElement('small');
-    eyebrow.textContent = item.type === 'photo' ? 'Photo memory' : 'Spotify song';
+    eyebrow.textContent = item.type === 'photo' ? 'Photo memory' : item.type === 'audiobook' ? 'Audible audiobook' : 'Spotify song';
     const title = document.createElement('h2');
     title.textContent = item.title || `Memory ${index + 1}`;
     const byline = document.createElement('p');
-    byline.textContent = item.artists || '';
+    byline.textContent = item.type === 'audiobook' && item.narrators
+      ? `${item.artists || 'Author unavailable'} · Narrated by ${item.narrators}`
+      : (item.artists || '');
     heading.append(eyebrow, title, byline);
-    if (item.type === 'photo') {
+    if (item.type === 'audiobook' && item.url) {
+      const sourceLink = document.createElement('a');
+      sourceLink.className = 'memory-source-link';
+      sourceLink.href = item.url;
+      sourceLink.target = '_blank';
+      sourceLink.rel = 'noopener';
+      sourceLink.textContent = 'Open in Audible';
+      heading.append(sourceLink);
+    }
+    if (canEditProjectContent(project)) {
+      const itemActions = document.createElement('div');
+      itemActions.className = 'memory-item-actions';
       const editButton = document.createElement('button');
       editButton.type = 'button';
       editButton.className = 'memory-edit-name';
       editButton.textContent = '✎';
-      editButton.setAttribute('aria-label', `Rename ${item.title || `photo ${index + 1}`}`);
+      editButton.setAttribute('aria-label', `Rename ${item.title || `item ${index + 1}`}`);
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'memory-delete-item';
+      deleteButton.textContent = '×';
+      deleteButton.setAttribute('aria-label', `Delete ${item.title || `item ${index + 1}`}`);
       const editor = document.createElement('form');
       editor.className = 'memory-name-editor';
       editor.hidden = true;
@@ -1032,7 +1267,7 @@ function renderMemoryBoxProject(project) {
       nameInput.type = 'text';
       nameInput.value = item.title || '';
       nameInput.maxLength = 120;
-      nameInput.setAttribute('aria-label', 'Photo name');
+      nameInput.setAttribute('aria-label', 'Item name');
       const save = document.createElement('button');
       save.type = 'submit';
       save.textContent = 'Save';
@@ -1044,7 +1279,7 @@ function renderMemoryBoxProject(project) {
       editor.append(nameInput, save, cancel, editStatus);
       editButton.addEventListener('click', () => {
         title.hidden = true;
-        editButton.hidden = true;
+        itemActions.hidden = true;
         editor.hidden = false;
         nameInput.focus();
         nameInput.select();
@@ -1052,7 +1287,7 @@ function renderMemoryBoxProject(project) {
       cancel.addEventListener('click', () => {
         editor.hidden = true;
         title.hidden = false;
-        editButton.hidden = false;
+        itemActions.hidden = false;
         editStatus.textContent = '';
       });
       nameInput.addEventListener('keydown', event => {
@@ -1071,7 +1306,13 @@ function renderMemoryBoxProject(project) {
           cancel.disabled = false;
         }
       });
-      heading.append(editButton, editor);
+      deleteButton.addEventListener('click', async () => {
+        if (!window.confirm(`Delete “${item.title || 'this item'}” from the Memory Box?`)) return;
+        try { await removeMemoryItem(project, item.id); }
+        catch (error) { window.alert(error.message || 'The item could not be deleted.'); }
+      });
+      itemActions.append(editButton, deleteButton);
+      heading.append(itemActions, editor);
     }
     if (item.type === 'song' && item.spotifyId) {
       const play = document.createElement('button');
@@ -1087,7 +1328,7 @@ function renderMemoryBoxProject(project) {
     top.append(media, heading);
     const discussion = document.createElement('div');
     discussion.className = 'chapter-discussion';
-    appendDiscussion(discussion, item.comments, 'Be the first to share the story behind this memory.');
+    appendDiscussion(discussion, item.comments, 'Be the first to share the story behind this memory.', project, item.id);
     const composer = document.createElement('form');
     composer.className = 'chapter-composer';
     const input = document.createElement('textarea');
@@ -1108,6 +1349,7 @@ function renderMemoryBoxProject(project) {
       try { await addMemoryComment(project, item.id, input.value); }
       catch (error) { status.textContent = error.message || 'Your comment could not be posted.'; button.disabled = false; }
     });
+    composer.hidden = !canContribute(project);
     card.append(top, discussion, composer);
     sceneList.append(card);
   });
@@ -1119,16 +1361,19 @@ async function openProject(project) {
   document.querySelector('#refresh-project-status').textContent = '';
   project.ownerEmail ||= getSession()?.username || '';
   project.collaborators ||= [];
+  normalizeCollaboratorRoles(project);
   closeTitleEditor();
   createScreen.hidden = true;
   setupScreen.hidden = true;
   projectScreen.hidden = false;
   projectScreen.dataset.type = project.type;
+  projectScreen.dataset.role = projectRole(project) || 'viewer';
   profileScreen.hidden = true;
   libraryScreen.hidden = true;
   document.querySelector('#project-type').textContent = project.type;
+  document.querySelector('#edit-project-title').hidden = !canEditProjectContent(project);
   if (project.type === 'Bookclub') {
-    if (project.book?.chapters?.length && project.book.metadataVersion !== 1 && project.sourceUrl) {
+    if (canEditProjectContent(project) && project.book?.chapters?.length && project.book.metadataVersion !== 1 && project.sourceUrl) {
       try { await repairBookProject(project, true); } catch { /* Keep saved book details if refresh fails. */ }
     }
     if (!project.book?.chapters?.length) {
@@ -1137,6 +1382,7 @@ async function openProject(project) {
       document.querySelector('#project-summary').textContent = 'Loading the cover, details, and chapters from Audible…';
       document.querySelector('#scene-list').replaceChildren();
       try {
+        if (!canEditProjectContent(project)) throw new Error('This book needs an editor to refresh it.');
         await repairBookProject(project);
       } catch {
         document.querySelector('#project-playlist').textContent = 'Audible book unavailable';
@@ -1161,7 +1407,7 @@ async function openProject(project) {
       project.memoryCover = project.playlist.image || '';
       project.memorySourceName = project.playlist.name || '';
       project.updatedAt = new Date().toISOString();
-      syncProject(project);
+      if (canEditProjectContent(project)) syncProject(project);
     }
     project.memoryItems ||= [];
     const isOwner = project.ownerEmail === getSession()?.username;
@@ -1175,7 +1421,7 @@ async function openProject(project) {
     renderMemoryBoxProject(project);
     return;
   }
-  if (project.playlist?.songs?.length && project.playlist.metadataVersion !== 3 && project.sourceUrl) {
+  if (canEditProjectContent(project) && project.playlist?.songs?.length && project.playlist.metadataVersion !== 3 && project.sourceUrl) {
     try { await repairProject(project, true); } catch { /* Keep the saved playlist if metadata refresh fails. */ }
   }
   if (!project.playlist?.songs?.length) {
@@ -1188,6 +1434,7 @@ async function openProject(project) {
       return;
     }
     try {
+      if (!canEditProjectContent(project)) throw new Error('This playlist needs an editor to refresh it.');
       await repairProject(project);
     } catch {
       document.querySelector('#project-playlist').textContent = project.type;
@@ -1219,7 +1466,7 @@ async function openProject(project) {
   cover.hidden = !project.playlist?.image;
   if (project.playlist?.image) cover.src = project.playlist.image;
   const songs = project.playlist?.songs || [];
-  document.querySelector('#project-summary').textContent = `${songs.length} track${songs.length === 1 ? '' : 's'} · Your scenes save automatically`;
+  document.querySelector('#project-summary').textContent = `${songs.length} track${songs.length === 1 ? '' : 's'} · ${canEditProjectContent(project) ? 'Your scenes save automatically' : 'Viewer access'}`;
   const sceneList = document.querySelector('#scene-list');
   sceneList.replaceChildren();
 
@@ -1263,7 +1510,8 @@ async function openProject(project) {
     textarea.rows = 5;
     textarea.placeholder = 'Describe the scene for this song…';
     textarea.value = song.scene || '';
-    textarea.addEventListener('input', () => saveScene(project.id, index, textarea.value));
+    textarea.readOnly = !canEditProjectContent(project);
+    if (!textarea.readOnly) textarea.addEventListener('input', () => saveScene(project.id, index, textarea.value));
     label.append(accessibleLabel, textarea);
     card.append(heading, label);
     sceneList.append(card);
@@ -1404,6 +1652,8 @@ function openFormat(name) {
   const format = formats[name];
   activeFormat = name;
   resolvedSource = null;
+  memorySourceType = null;
+  memoryPhotoFile = null;
   selectedFormat.textContent = name;
   selectedBadge.innerHTML = format.icon;
   selectedBadge.parentElement.className = `selected-heading ${format.className}`;
@@ -1413,17 +1663,83 @@ function openFormat(name) {
   sourceHelp.textContent = format.sourceHelp;
   lookupSource.textContent = format.lookupLabel;
   sourceUrl.value = '';
+  memoryFirstPhoto.value = '';
+  memoryFirstPhotoName.value = '';
+  document.querySelector('#memory-first-photo-file').textContent = 'No photo selected';
   formMessage.textContent = '';
   const sourceArt = document.querySelector('#source-art');
   sourceArt.style.backgroundImage = '';
   sourceArt.textContent = name === 'Bookclub' ? 'A' : '♫';
   metadataPreview.hidden = true;
-  nameStep.hidden = name !== 'Memory Box';
+  memorySourceChoices.hidden = name !== 'Memory Box';
+  memorySourceChoices.querySelectorAll('button').forEach(button => button.classList.remove('active'));
+  sourceLinkControls.hidden = name === 'Memory Box';
+  memoryPhotoSetup.hidden = true;
+  nameStep.hidden = true;
   nameStep.querySelector('.primary-button').textContent = `Create ${name}`;
   createScreen.hidden = true;
   setupScreen.hidden = false;
+  (name === 'Memory Box' ? memorySourceChoices.querySelector('button') : sourceUrl).focus();
+}
+
+function chooseMemorySource(type) {
+  memorySourceType = type;
+  memoryPhotoFile = null;
+  resolvedSource = null;
+  sourceUrl.value = '';
+  memoryFirstPhoto.value = '';
+  metadataPreview.hidden = true;
+  nameStep.hidden = true;
+  formMessage.textContent = '';
+  memorySourceChoices.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.memorySource === type));
+  const photo = type === 'photo';
+  sourceLinkControls.hidden = photo;
+  memoryPhotoSetup.hidden = !photo;
+  if (photo) {
+    memoryFirstPhotoName.focus();
+    return;
+  }
+  const audiobook = type === 'audiobook';
+  sourceLabel.textContent = audiobook ? 'Audible audiobook link' : type === 'song' ? 'Spotify song link' : 'Spotify playlist link';
+  sourceUrl.placeholder = audiobook ? 'https://www.audible.com/pd/…' : type === 'song' ? 'https://open.spotify.com/track/…' : 'https://open.spotify.com/playlist/…';
+  sourceHelp.textContent = audiobook ? 'Paste the Audible page for the audiobook.' : `Paste the Spotify ${type} link you want to add first.`;
+  lookupSource.textContent = audiobook ? 'Find this audiobook' : type === 'song' ? 'Find this song' : 'Find this playlist';
   sourceUrl.focus();
 }
+
+memorySourceChoices.querySelectorAll('button').forEach(button => button.addEventListener('click', () => chooseMemorySource(button.dataset.memorySource)));
+
+memoryFirstPhoto.addEventListener('change', () => {
+  const file = memoryFirstPhoto.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    formMessage.textContent = 'Choose an image file.';
+    memoryFirstPhoto.value = '';
+    return;
+  }
+  memoryPhotoFile = file;
+  const title = memoryFirstPhotoName.value.trim() || file.name.replace(/\.[^.]+$/, '');
+  resolvedSource = { name: title, image: URL.createObjectURL(file), items: [] };
+  document.querySelector('#memory-first-photo-file').textContent = file.name;
+  document.querySelector('#preview-label').textContent = 'Photo';
+  document.querySelector('#preview-title').textContent = title;
+  document.querySelector('#preview-byline').textContent = 'Ready for your Memory Box';
+  document.querySelector('#preview-meta').textContent = 'You can add more photos, audiobooks, songs, and playlists next.';
+  const art = document.querySelector('#source-art');
+  art.textContent = '';
+  art.style.backgroundImage = `url("${resolvedSource.image}")`;
+  art.style.backgroundSize = 'cover';
+  art.style.backgroundPosition = 'center';
+  metadataPreview.hidden = false;
+  nameStep.hidden = false;
+  nameStep.querySelector('.primary-button').textContent = 'Create Memory Box';
+});
+
+memoryFirstPhotoName.addEventListener('input', () => {
+  if (!resolvedSource || memorySourceType !== 'photo') return;
+  resolvedSource.name = memoryFirstPhotoName.value.trim() || memoryPhotoFile?.name.replace(/\.[^.]+$/, '') || 'Photo memory';
+  document.querySelector('#preview-title').textContent = resolvedSource.name;
+});
 
 document.querySelectorAll('.creation-card').forEach(card => {
   card.addEventListener('click', () => {
@@ -1508,27 +1824,33 @@ lookupSource.addEventListener('click', async () => {
   try {
     url = new URL(sourceUrl.value.trim());
   } catch {
-    formMessage.textContent = `Enter a valid ${activeFormat === 'Bookclub' ? 'Audible book' : 'Spotify playlist or song'} link.`;
+    const expected = activeFormat === 'Bookclub' || memorySourceType === 'audiobook' ? 'Audible audiobook' : `Spotify ${memorySourceType || 'playlist'}`;
+    formMessage.textContent = `Enter a valid ${expected} link.`;
     return;
   }
 
   const isBookclub = activeFormat === 'Bookclub';
-  const playlistId = isBookclub ? null : spotifyPlaylistId(url.href);
-  const trackId = isBookclub ? null : spotifyTrackId(url.href);
-  const bookAsin = isBookclub ? audibleAsin(url.href) : null;
-  const validHost = isBookclub ? Boolean(bookAsin) : activeFormat === 'Memory Box' ? Boolean(playlistId || trackId) : Boolean(playlistId);
+  const usesAudible = isBookclub || (activeFormat === 'Memory Box' && memorySourceType === 'audiobook');
+  const playlistId = usesAudible ? null : spotifyPlaylistId(url.href);
+  const trackId = usesAudible ? null : spotifyTrackId(url.href);
+  const bookAsin = usesAudible ? audibleAsin(url.href) : null;
+  const validHost = usesAudible
+    ? Boolean(bookAsin)
+    : activeFormat === 'Memory Box'
+      ? (memorySourceType === 'song' ? Boolean(trackId) : Boolean(playlistId))
+      : Boolean(playlistId);
   if (!validHost) {
-    formMessage.textContent = `That does not look like an ${isBookclub ? 'Audible' : 'Spotify'} link.`;
+    formMessage.textContent = `That does not look like an ${usesAudible ? 'Audible' : 'Spotify'} link for this choice.`;
     return;
   }
 
   formMessage.textContent = '';
-  if (!isBookclub) {
+  if (!usesAudible) {
     const originalLabel = lookupSource.textContent;
     lookupSource.disabled = true;
     lookupSource.textContent = trackId ? 'Finding song…' : 'Finding playlist…';
     try {
-      if (activeFormat === 'Memory Box' && trackId) {
+      if (activeFormat === 'Memory Box' && memorySourceType === 'song') {
         const track = await importSpotifyTrack(url.href);
         resolvedSource = { name: track.title, image: track.image, owner: track.artists, items: [songToMemoryItem(track)] };
       } else {
@@ -1537,7 +1859,7 @@ lookupSource.addEventListener('click', async () => {
           ? { ...playlist, items: playlist.songs.map(songToMemoryItem) }
           : playlist;
       }
-      document.querySelector('#preview-label').textContent = trackId ? 'Spotify song' : 'Spotify playlist';
+      document.querySelector('#preview-label').textContent = memorySourceType === 'song' ? 'Spotify song' : 'Spotify playlist';
       document.querySelector('#preview-title').textContent = resolvedSource.name;
       document.querySelector('#preview-byline').textContent = resolvedSource.owner || 'Spotify';
       const count = resolvedSource.items?.length || resolvedSource.songs?.length || 0;
@@ -1567,14 +1889,19 @@ lookupSource.addEventListener('click', async () => {
   lookupSource.disabled = true;
   lookupSource.textContent = 'Finding book…';
   try {
-    resolvedSource = await importAudibleBook(url.href);
+    const importedBook = await importAudibleBook(url.href);
+    resolvedSource = activeFormat === 'Memory Box'
+      ? { name: importedBook.name, image: importedBook.image, owner: (importedBook.authors || []).join(', '), items: [audibleBookToMemoryItem(importedBook)] }
+      : importedBook;
     document.querySelector('#preview-label').textContent = 'Audible book';
     document.querySelector('#preview-title').textContent = resolvedSource.name;
-    const authors = resolvedSource.authors?.join(', ') || 'Author unavailable';
-    const narrators = resolvedSource.narrators?.join(', ') || 'Narrator unavailable';
+    const authors = importedBook.authors?.join(', ') || 'Author unavailable';
+    const narrators = importedBook.narrators?.join(', ') || 'Narrator unavailable';
     document.querySelector('#preview-byline').textContent = `${authors} · Narrated by ${narrators}`;
-    const runtime = resolvedSource.runtimeMinutes ? `${Math.floor(resolvedSource.runtimeMinutes / 60)} hr ${resolvedSource.runtimeMinutes % 60} min` : 'Runtime unavailable';
-    document.querySelector('#preview-meta').textContent = `${resolvedSource.chapters.length} chapters · ${runtime}`;
+    const runtime = importedBook.runtimeMinutes ? `${Math.floor(importedBook.runtimeMinutes / 60)} hr ${importedBook.runtimeMinutes % 60} min` : 'Runtime unavailable';
+    document.querySelector('#preview-meta').textContent = activeFormat === 'Memory Box'
+      ? `${runtime} · Ready for your Memory Box`
+      : `${importedBook.chapters.length} chapters · ${runtime}`;
     const art = document.querySelector('#source-art');
     art.textContent = '';
     art.style.backgroundImage = resolvedSource.image ? `url("${resolvedSource.image}")` : '';
@@ -1592,7 +1919,7 @@ lookupSource.addEventListener('click', async () => {
   }
 });
 
-document.querySelector('#create-item').addEventListener('click', () => {
+document.querySelector('#create-item').addEventListener('click', async () => {
   const session = getSession();
   if (!session) {
     pendingFormat = activeFormat;
@@ -1601,9 +1928,11 @@ document.querySelector('#create-item').addEventListener('click', () => {
   }
   const nameInput = document.querySelector('#creation-name');
   const name = nameInput.value.trim();
-  if (metadataPreview.hidden && activeFormat !== 'Memory Box') {
-    formMessage.textContent = `Find the ${activeFormat === 'Bookclub' ? 'book' : 'playlist'} before creating this item.`;
-    sourceUrl.focus();
+  if (metadataPreview.hidden) {
+    formMessage.textContent = activeFormat === 'Memory Box'
+      ? 'Choose and add the first photo, audiobook, song, or playlist.'
+      : `Find the ${activeFormat === 'Bookclub' ? 'book' : 'playlist'} before creating this item.`;
+    (activeFormat === 'Memory Box' ? memorySourceChoices.querySelector('button') : sourceUrl).focus();
     return;
   }
   if (!name) {
@@ -1613,13 +1942,15 @@ document.querySelector('#create-item').addEventListener('click', () => {
   }
   const projects = getProjects();
   projects[session.username] ||= [];
+  const projectId = crypto.randomUUID();
   const project = {
-    id: crypto.randomUUID(),
+    id: projectId,
     type: activeFormat,
     name,
     ownerEmail: session.username,
     collaborators: [],
-    sourceUrl: sourceUrl.value.trim(),
+    collaboratorRoles: {},
+    sourceUrl: memorySourceType === 'photo' ? '' : sourceUrl.value.trim(),
     createdAt: new Date().toISOString(),
     playlist: activeFormat === 'Score to Scene' && resolvedSource ? {
       ...resolvedSource,
@@ -1635,6 +1966,27 @@ document.querySelector('#create-item').addEventListener('click', () => {
     memoryCover: activeFormat === 'Memory Box' ? (resolvedSource?.image || '') : '',
     memorySourceName: activeFormat === 'Memory Box' ? (resolvedSource?.name || '') : ''
   };
+  const createButton = document.querySelector('#create-item');
+  createButton.disabled = true;
+  if (activeFormat === 'Memory Box' && memorySourceType === 'photo') {
+    try {
+      if (!memoryPhotoFile) throw new Error('Choose a photo first.');
+      formMessage.textContent = 'Uploading photo…';
+      const safeName = memoryPhotoFile.name.replace(/[^A-Za-z0-9._-]+/g, '-');
+      const path = `${projectId}/${crypto.randomUUID()}-${safeName}`;
+      const { error } = await supabaseClient.storage.from('memory-box-images').upload(path, memoryPhotoFile, { contentType: memoryPhotoFile.type, upsert: false });
+      if (error) throw error;
+      const { data } = supabaseClient.storage.from('memory-box-images').getPublicUrl(path);
+      const photoTitle = memoryFirstPhotoName.value.trim() || memoryPhotoFile.name.replace(/\.[^.]+$/, '');
+      project.memoryItems = [{ id: crypto.randomUUID(), type: 'photo', title: photoTitle, image: data.publicUrl, storagePath: path, comments: [] }];
+      project.memoryCover = data.publicUrl;
+      project.memorySourceName = photoTitle;
+    } catch (error) {
+      formMessage.textContent = error.message || 'That photo could not be uploaded.';
+      createButton.disabled = false;
+      return;
+    }
+  }
   projects[session.username].unshift(project);
   syncProject(project);
   nameInput.value = '';
@@ -1642,6 +1994,7 @@ document.querySelector('#create-item').addEventListener('click', () => {
   if (['Score to Scene', 'Bookclub', 'Memory Box'].includes(activeFormat)) openProject(project);
   else createScreen.hidden = false;
   renderProjects();
+  createButton.disabled = false;
 });
 
 document.querySelector('#back-button').addEventListener('click', () => {
@@ -1671,7 +2024,7 @@ document.querySelector('#delete-project-button').addEventListener('click', async
 });
 
 document.querySelector('#edit-project-title').addEventListener('click', () => {
-  if (!activeProject) return;
+  if (!activeProject || !canEditProjectContent(activeProject)) return;
   const input = document.querySelector('#project-title-input');
   input.value = activeProject.name;
   document.querySelector('.project-title-row').hidden = true;

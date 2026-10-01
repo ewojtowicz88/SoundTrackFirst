@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#171411">
-  <meta name="application-version" content="0.6.1">
+  <meta name="application-version" content="0.7.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -88,10 +88,28 @@
         </div>
         <p class="intro" id="selected-description"></p>
         <div class="source-step">
-          <label for="source-url" id="source-label">Audible book link</label>
-          <input id="source-url" type="url" placeholder="https://www.audible.com/pd/…" inputmode="url">
-          <p class="field-help" id="source-help">Paste the Audible page for the book you want the club to read.</p>
-          <button class="primary-button" id="lookup-source" type="button">Find this book</button>
+          <div class="memory-source-choices" id="memory-source-choices" hidden>
+            <p>Choose the first item</p>
+            <div class="memory-choice-grid">
+              <button type="button" data-memory-source="photo"><span aria-hidden="true">▧</span>Photo</button>
+              <button type="button" data-memory-source="audiobook"><span aria-hidden="true">◉</span>Audiobook</button>
+              <button type="button" data-memory-source="song"><span aria-hidden="true">♪</span>Song</button>
+              <button type="button" data-memory-source="playlist"><span aria-hidden="true">♫</span>Playlist</button>
+            </div>
+          </div>
+          <div id="source-link-controls">
+            <label for="source-url" id="source-label">Audible book link</label>
+            <input id="source-url" type="url" placeholder="https://www.audible.com/pd/…" inputmode="url">
+            <p class="field-help" id="source-help">Paste the Audible page for the book you want the club to read.</p>
+            <button class="primary-button" id="lookup-source" type="button">Find this book</button>
+          </div>
+          <div class="memory-photo-setup" id="memory-photo-setup" hidden>
+            <label for="memory-first-photo-name">Photo name</label>
+            <input id="memory-first-photo-name" type="text" placeholder="Name this memory">
+            <label class="memory-photo-picker" for="memory-first-photo">Choose photo</label>
+            <input class="memory-file-input" id="memory-first-photo" type="file" accept="image/*">
+            <p class="field-help" id="memory-first-photo-file">No photo selected</p>
+          </div>
           <p class="form-message" id="form-message" role="alert"></p>
         </div>
 
@@ -135,6 +153,12 @@
           <div class="collaboration-heading"><div><p class="section-label">Collaboration</p><h2>Work on this together</h2></div><button id="invite-collaborator-button" type="button">Invite collaborators</button></div>
           <div class="invite-finder" id="invite-finder" hidden>
             <label for="collaborator-search">Find registered users by email</label>
+            <label for="collaborator-role">Access level</label>
+            <select id="collaborator-role">
+              <option value="viewer">Viewer — can view only</option>
+              <option value="collaborator" selected>Collaborator — can add items and comments</option>
+              <option value="editor">Editor — can modify and delete items and comments</option>
+            </select>
             <input id="collaborator-search" type="email" inputmode="email" autocomplete="off" placeholder="Start typing an email address">
             <div class="user-options" id="collaborator-options"></div>
             <p class="form-message" id="collaborator-message" role="status"></p>
