@@ -1103,6 +1103,36 @@ async function updateMemoryItemTitle(project, itemId, nextTitle) {
   await openProject(latest);
 }
 
+async function attachSongToMemoryItem(project, itemId, spotifyUrl) {
+  if (!canContribute(project)) throw new Error('Collaborator access is required to add a song.');
+  const track = await importSpotifyTrack(spotifyUrl);
+  const latest = await latestRemoteProject(project);
+  const item = latest.memoryItems?.find(entry => entry.id === itemId);
+  if (!item || !['photo', 'art'].includes(item.type)) throw new Error('That photo or artwork could not be found. Refresh and try again.');
+  if (item.attachedSong) throw new Error('This memory already has a song. Remove it before adding another.');
+  item.attachedSong = attributeMemoryItem(songToMemoryItem(track));
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
+async function removeSongFromMemoryItem(project, itemId) {
+  if (!canEditProjectContent(project)) throw new Error('Editor access is required to remove a song.');
+  const latest = await latestRemoteProject(project);
+  const item = latest.memoryItems?.find(entry => entry.id === itemId);
+  if (!item) throw new Error('That memory could not be found. Refresh and try again.');
+  delete item.attachedSong;
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
 async function removeMemoryItem(project, itemId) {
   if (!canEditProjectContent(project)) throw new Error('Editor access is required.');
   const latest = await latestRemoteProject(project);
@@ -1506,6 +1536,80 @@ function renderCollectionProject(project) {
     const top = document.createElement('div');
     top.className = 'memory-top';
     top.append(media, heading);
+    const songArea = document.createElement('div');
+    songArea.className = 'memory-attached-song-area';
+    if (['photo', 'art'].includes(item.type) && item.attachedSong) {
+      const song = item.attachedSong;
+      const songImage = document.createElement('img');
+      songImage.src = song.image || 'assets/score-to-scene-icon.jpeg';
+      songImage.alt = '';
+      const songCopy = document.createElement('div');
+      const songLabel = document.createElement('small');
+      songLabel.textContent = 'Song for this memory';
+      const songTitle = document.createElement('a');
+      songTitle.href = song.url || `https://open.spotify.com/track/${song.spotifyId}`;
+      songTitle.target = '_blank';
+      songTitle.rel = 'noopener';
+      songTitle.textContent = song.title || 'Spotify song';
+      const songArtist = document.createElement('p');
+      songArtist.textContent = song.artists || 'Unknown artist';
+      songCopy.append(songLabel, songTitle, songArtist);
+      const songPlay = document.createElement('button');
+      songPlay.type = 'button';
+      songPlay.className = 'memory-attached-song-play';
+      songPlay.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg>';
+      songPlay.setAttribute('aria-label', `Play ${song.title}`);
+      songPlay.addEventListener('click', () => startSpotifyTrack(song.spotifyId));
+      const songActions = document.createElement('div');
+      songActions.className = 'memory-attached-song-actions';
+      songActions.append(songPlay);
+      if (canEditProjectContent(project)) {
+        const removeSong = document.createElement('button');
+        removeSong.type = 'button';
+        removeSong.className = 'memory-attached-song-remove';
+        removeSong.textContent = '×';
+        removeSong.setAttribute('aria-label', `Remove ${song.title || 'song'} from this memory`);
+        removeSong.addEventListener('click', async () => {
+          if (!window.confirm('Remove this song from the memory?')) return;
+          try { await removeSongFromMemoryItem(project, item.id); }
+          catch (error) { window.alert(error.message || 'The song could not be removed.'); }
+        });
+        songActions.append(removeSong);
+      }
+      songArea.append(songImage, songCopy, songActions);
+    } else if (['photo', 'art'].includes(item.type) && canContribute(project)) {
+      const songForm = document.createElement('form');
+      songForm.className = 'memory-song-form';
+      const songLabel = document.createElement('label');
+      songLabel.textContent = 'Add a song to this memory';
+      const songInput = document.createElement('input');
+      songInput.type = 'url';
+      songInput.placeholder = 'Paste a Spotify song link';
+      songInput.setAttribute('aria-label', `Spotify song for ${item.title}`);
+      const songButton = document.createElement('button');
+      songButton.type = 'submit';
+      songButton.textContent = 'Add song';
+      const songStatus = document.createElement('p');
+      songStatus.className = 'form-message memory-song-status';
+      songForm.append(songLabel, songInput, songButton, songStatus);
+      songForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const url = songInput.value.trim();
+        if (!url) return songInput.focus();
+        if (!spotifyTrackId(url)) {
+          songStatus.textContent = 'Paste a full Spotify song link.';
+          return songInput.focus();
+        }
+        songButton.disabled = true;
+        songStatus.textContent = 'Adding song…';
+        try { await attachSongToMemoryItem(project, item.id, url); }
+        catch (error) {
+          songStatus.textContent = error.message || 'That song could not be added.';
+          songButton.disabled = false;
+        }
+      });
+      songArea.append(songForm);
+    }
     const discussion = document.createElement('div');
     discussion.className = 'chapter-discussion';
     appendDiscussion(discussion, item.comments, isGallery || item.type === 'art' ? 'Be the first to share what this artwork makes you think or feel.' : 'Be the first to share the story behind this memory.', project, item.id);
@@ -1530,7 +1634,9 @@ function renderCollectionProject(project) {
       catch (error) { status.textContent = error.message || 'Your comment could not be posted.'; button.disabled = false; }
     });
     composer.hidden = !canContribute(project);
-    card.append(top, discussion, composer);
+    card.append(top);
+    if (songArea.childElementCount) card.append(songArea);
+    card.append(discussion, composer);
     sceneList.append(card);
   });
 }
