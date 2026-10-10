@@ -489,6 +489,16 @@ function audibleBookToMemoryItem(book) {
   };
 }
 
+function attributeMemoryItem(item, session = getSession()) {
+  if (!session) return item;
+  return {
+    ...item,
+    addedByEmail: item.addedByEmail || session.username,
+    addedByName: item.addedByName || session.displayName,
+    addedAt: item.addedAt || new Date().toISOString()
+  };
+}
+
 function metObjectToCollectionItem(object) {
   return {
     id: crypto.randomUUID(),
@@ -1037,9 +1047,11 @@ async function latestRemoteProject(project) {
 
 async function saveMemoryItems(project, additions) {
   if (!canContribute(project)) throw new Error('Collaborator access is required to add items.');
+  const session = getSession();
   const latest = await latestRemoteProject(project);
   latest.memoryItems ||= [];
-  for (const item of additions) {
+  for (const addition of additions) {
+    const item = attributeMemoryItem(addition, session);
     const duplicate = item.type === 'song' && latest.memoryItems.some(existing => existing.type === 'song' && existing.spotifyId === item.spotifyId);
     if (!duplicate) latest.memoryItems.push(item);
   }
@@ -1391,7 +1403,12 @@ function renderCollectionProject(project) {
       : item.type === 'audiobook' && item.narrators
       ? `${item.artists || 'Author unavailable'} · Narrated by ${item.narrators}`
       : (item.artists || '');
-    heading.append(eyebrow, title, byline);
+    const addedBy = document.createElement('p');
+    addedBy.className = 'memory-added-by';
+    const addedByEmail = item.addedByEmail || project.ownerEmail || '';
+    const addedByName = item.addedByName || getUsers()[addedByEmail]?.displayName || addedByEmail || 'Unknown member';
+    addedBy.textContent = `Added by ${addedByName}`;
+    heading.append(eyebrow, title, byline, addedBy);
     if (item.type === 'audiobook' && item.url) {
       const sourceLink = document.createElement('a');
       sourceLink.className = 'memory-source-link';
@@ -2197,6 +2214,7 @@ document.querySelector('#create-item').addEventListener('click', async () => {
       return;
     }
   }
+  if (project.memoryItems) project.memoryItems = project.memoryItems.map(item => attributeMemoryItem(item, session));
   projects[session.username].unshift(project);
   syncProject(project);
   nameInput.value = '';

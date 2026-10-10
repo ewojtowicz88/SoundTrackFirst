@@ -201,6 +201,7 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory-heading small { color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
 .memory-heading h2 { margin: 5px 0 4px; overflow-wrap: anywhere; font: 400 15px/1.3 "Libre Baskerville", Georgia, serif; }
 .memory-heading p { margin: 0; color: var(--muted); font-size: 10px; }
+.memory-heading .memory-added-by { margin-top: 6px; color: var(--gold-bright); font-size: 9px; }
 .memory-source-link { display: inline-block; margin-top: 7px; color: var(--gold-bright); font-size: 10px; }
 .memory-item-actions { position: absolute; top: 0; right: 0; display: flex; gap: 5px; }
 .memory-item-actions button { width: 32px; height: 32px; padding: 0; border: 1px solid #6f5e43; border-radius: 50%; background: transparent; font-size: 14px; }
