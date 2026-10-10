@@ -72,7 +72,6 @@ const artSearchResults = document.querySelector('#art-search-results');
 const searchArtButton = document.querySelector('#search-art');
 let activeFormat = 'Score to Scene';
 let pendingFormat = null;
-let authMode = 'login';
 let resolvedSource = null;
 let memorySourceType = null;
 let memoryPhotoFile = null;
@@ -159,8 +158,6 @@ const authDialog = document.querySelector('#auth-dialog');
 const profileButton = document.querySelector('#profile-button');
 const profileMenu = document.querySelector('#profile-menu');
 const authForm = document.querySelector('#auth-form');
-const loginTab = document.querySelector('#login-tab');
-const createTab = document.querySelector('#create-tab');
 
 const supabaseClient = supabase.createClient(
   'https://yjawkdddxcwwvipdjddy.supabase.co',
@@ -1778,23 +1775,9 @@ async function logout() {
   updateProfileButton();
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const creating = mode === 'create';
-  document.querySelector('#auth-name').hidden = !creating;
-  document.querySelector('#display-name').required = creating;
-  document.querySelector('#password').autocomplete = creating ? 'new-password' : 'current-password';
-  document.querySelector('#auth-submit').textContent = creating ? 'Create account and continue' : 'Log in and continue';
-  loginTab.classList.toggle('active', !creating);
-  createTab.classList.toggle('active', creating);
-  loginTab.setAttribute('aria-selected', String(!creating));
-  createTab.setAttribute('aria-selected', String(creating));
-  document.querySelector('#auth-error').textContent = '';
-}
-
 function showAuth() {
-  setAuthMode('login');
   authForm.reset();
+  document.querySelector('#auth-error').textContent = '';
   authDialog.showModal();
   document.querySelector('#username').focus();
 }
@@ -1959,8 +1942,6 @@ document.querySelectorAll('.creation-card').forEach(card => {
   });
 });
 
-loginTab.addEventListener('click', () => setAuthMode('login'));
-createTab.addEventListener('click', () => setAuthMode('create'));
 document.querySelector('#dialog-close').addEventListener('click', () => authDialog.close());
 profileButton.addEventListener('click', () => {
   if (!getSession()) {
@@ -1999,14 +1980,11 @@ authForm.addEventListener('submit', async event => {
   submit.disabled = true;
   error.textContent = '';
   try {
-    const displayName = document.querySelector('#display-name').value.trim();
-    const { data, error: authError } = authMode === 'create'
-      ? await supabaseClient.auth.signUp({ email: username, password, options: { data: { display_name: displayName } } })
-      : await supabaseClient.auth.signInWithPassword({ email: username, password });
+    const { data, error: authError } = await supabaseClient.auth.signInWithPassword({ email: username, password });
     if (authError) throw authError;
-    if (!data.user || !data.session) throw new Error('Check your email to confirm this account before signing in.');
+    if (!data.user || !data.session) throw new Error('Unable to sign in with that account.');
     const users = getUsers();
-    const resolvedName = data.user.user_metadata?.display_name || displayName || users[username]?.displayName || username.split('@')[0];
+    const resolvedName = data.user.user_metadata?.display_name || users[username]?.displayName || username.split('@')[0];
     users[username] = { displayName: resolvedName };
     localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
     currentSession = sessionFromUser(data.user);
