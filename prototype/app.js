@@ -2172,6 +2172,7 @@ document.querySelector('#profile-back-button').addEventListener('click', () => {
   showCreate();
 });
 document.querySelector('#nav-library-button').addEventListener('click', showLibrary);
+document.querySelector('#view-all-library').addEventListener('click', showLibrary);
 document.querySelector('#nav-create-button').addEventListener('click', showCreate);
 document.querySelector('#library-create-button').addEventListener('click', showCreate);
 
