@@ -928,8 +928,12 @@ function renderBookclubProject(project) {
   const book = project.book;
   document.querySelector('#project-type').textContent = 'Bookclub';
   document.querySelector('#project-title').textContent = project.name;
-  document.querySelector('#project-playlist').textContent = book.name;
-  document.querySelector('#project-source-kind').textContent = 'Audible book';
+  const projectSource = document.querySelector('#project-playlist');
+  projectSource.textContent = book.name;
+  projectSource.href = book.url || project.sourceUrl;
+  const sourceKind = document.querySelector('#project-source-kind');
+  sourceKind.textContent = 'Audible book';
+  sourceKind.href = book.url || project.sourceUrl;
   const owner = document.querySelector('#project-owner');
   owner.textContent = book.authors?.join(', ') || 'Author unavailable';
   owner.href = book.url || project.sourceUrl;
@@ -1132,8 +1136,18 @@ function renderCollectionProject(project) {
   const items = project.memoryItems;
   document.querySelector('#project-type').textContent = project.type;
   document.querySelector('#project-title').textContent = project.name;
-  document.querySelector('#project-playlist').textContent = project.memorySourceName || project.playlist?.name || (isGallery ? 'A shared collection of art' : 'Photos, art, audiobooks, songs, and playlists');
-  document.querySelector('#project-source-kind').textContent = isGallery ? 'The Met collection' : 'Shared collection';
+  const projectSource = document.querySelector('#project-playlist');
+  projectSource.textContent = project.memorySourceName || project.playlist?.name || (isGallery ? 'A shared collection of art' : 'Photos, art, audiobooks, songs, and playlists');
+  const sourceKind = document.querySelector('#project-source-kind');
+  sourceKind.textContent = isGallery ? 'The Met collection' : 'Shared collection';
+  const sourceHref = isGallery ? 'https://www.metmuseum.org/art/collection' : (project.playlist?.url || project.sourceUrl || '');
+  if (sourceHref) {
+    projectSource.href = sourceHref;
+    sourceKind.href = sourceHref;
+  } else {
+    projectSource.removeAttribute('href');
+    sourceKind.removeAttribute('href');
+  }
   const owner = document.querySelector('#project-owner');
   owner.textContent = isGallery ? 'The Metropolitan Museum of Art' : 'Shared memory collection';
   if (isGallery) owner.href = 'https://www.metmuseum.org/art/collection';
@@ -1601,8 +1615,18 @@ async function openProject(project) {
   document.querySelector('#collaborator-options').replaceChildren();
   document.querySelector('#collaborator-message').textContent = '';
   renderCollaborators(project);
-  document.querySelector('#project-source-kind').textContent = 'Spotify playlist';
-  document.querySelector('#project-playlist').textContent = project.playlist?.name || project.type;
+  const playlistUrl = project.playlist?.url || project.sourceUrl || '';
+  const sourceKind = document.querySelector('#project-source-kind');
+  sourceKind.textContent = 'Spotify playlist';
+  const projectSource = document.querySelector('#project-playlist');
+  projectSource.textContent = project.playlist?.name || project.type;
+  if (playlistUrl) {
+    sourceKind.href = playlistUrl;
+    projectSource.href = playlistUrl;
+  } else {
+    sourceKind.removeAttribute('href');
+    projectSource.removeAttribute('href');
+  }
   const owner = document.querySelector('#project-owner');
   owner.textContent = project.playlist?.owner || 'Spotify user';
   owner.href = project.playlist?.ownerUrl || project.playlist?.url || '#';

@@ -90,7 +90,8 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .project-title-editor[hidden] { display: none; }
 .project-title-editor input { min-width: 0; padding: 8px 9px; }
 .project-title-editor button { padding: 7px 9px; border: 1px solid #5b4b3a; border-radius: 7px; background: #2c251e; color: var(--gold-bright); font-size: 10px; }
-.project-playlist { margin: 0; color: var(--spotify); font-size: 11px; }
+.project-playlist { display: inline-block; margin: 0; color: var(--spotify); font-size: 11px; text-decoration: none; }
+.project-playlist[href]:hover { text-decoration: underline; }
 .project-screen[data-type="Bookclub"] .project-playlist,
 .project-screen[data-type="Bookclub"] .playlist-credit,
 .project-screen[data-type="Bookclub"] .playlist-credit a { color: var(--gold-bright); }
