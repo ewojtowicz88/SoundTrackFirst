@@ -939,6 +939,7 @@ function renderBookclubProject(project) {
   document.querySelector('#project-type').textContent = 'Bookclub';
   document.querySelector('#project-title').textContent = project.name;
   const projectSource = document.querySelector('#project-playlist');
+  projectSource.hidden = false;
   projectSource.textContent = book.name;
   projectSource.href = book.url || project.sourceUrl;
   const sourceKind = document.querySelector('#project-source-kind');
@@ -1179,7 +1180,8 @@ function renderCollectionProject(project) {
   document.querySelector('#project-type').textContent = project.type;
   document.querySelector('#project-title').textContent = project.name;
   const projectSource = document.querySelector('#project-playlist');
-  projectSource.textContent = project.memorySourceName || project.playlist?.name || (isGallery ? 'A shared collection of art' : 'Photos, art, audiobooks, songs, and playlists');
+  projectSource.hidden = !isGallery;
+  projectSource.textContent = isGallery ? (project.memorySourceName || 'A shared collection of art') : '';
   const sourceKind = document.querySelector('#project-source-kind');
   sourceKind.textContent = isGallery ? 'The Met collection' : 'Shared collection';
   const sourceHref = isGallery ? 'https://www.metmuseum.org/art/collection' : (project.playlist?.url || project.sourceUrl || '');
@@ -1654,6 +1656,7 @@ async function openProject(project) {
   projectScreen.hidden = false;
   projectScreen.dataset.type = project.type;
   projectScreen.dataset.role = projectRole(project) || 'viewer';
+  document.querySelector('#project-playlist').hidden = false;
   profileScreen.hidden = true;
   libraryScreen.hidden = true;
   document.querySelector('#project-type').textContent = project.type;
@@ -1742,6 +1745,7 @@ async function openProject(project) {
   const sourceKind = document.querySelector('#project-source-kind');
   sourceKind.textContent = 'Spotify playlist';
   const projectSource = document.querySelector('#project-playlist');
+  projectSource.hidden = false;
   projectSource.textContent = project.playlist?.name || project.type;
   if (playlistUrl) {
     sourceKind.href = playlistUrl;
