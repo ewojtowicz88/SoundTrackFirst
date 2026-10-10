@@ -242,7 +242,17 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .profile-screen { padding-top: 8px; }
 .profile-identity { display: flex; align-items: center; gap: 16px; margin-top: 30px; padding: 20px; border: 1px solid #443a30; border-radius: 16px; background: linear-gradient(145deg, #28221c, #1e1a16); }
 .profile-avatar { display: grid; flex: 0 0 62px; place-items: center; width: 62px; height: 62px; border: 1px solid #806b4b; border-radius: 50%; background: #332a21; color: var(--gold-bright); font: 700 20px/1 "Libre Baskerville", Georgia, serif; }
+.profile-copy { min-width: 0; flex: 1; }
+.profile-name-row { display: flex; align-items: center; gap: 9px; }
 .profile-identity h1 { margin: 0 0 5px; font-size: 25px; letter-spacing: -.035em; }
+.profile-name-row button { flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 1px solid #6f5e43; border-radius: 50%; background: transparent; color: var(--gold-bright); }
+.profile-name-editor { margin-bottom: 9px; }
+.profile-name-editor[hidden] { display: none; }
+.profile-name-editor label { display: block; margin-bottom: 6px; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.profile-name-editor input { width: 100%; padding: 9px 10px; border: 1px solid #6f5e43; border-radius: 8px; background: #171411; color: var(--foreground); }
+.profile-name-editor > div { display: flex; gap: 6px; margin-top: 7px; }
+.profile-name-editor button { padding: 7px 10px; border: 1px solid #6f5e43; border-radius: 7px; background: #30271e; color: var(--gold-bright); font-size: 9px; font-weight: 700; }
+.profile-name-editor .form-message { margin-bottom: 0; }
 .profile-identity p { margin: 0; color: var(--muted); font-size: 12px; }
 .profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
 .profile-stat { padding: 17px; border: 1px solid #443a30; border-radius: 13px; background: var(--surface); }

@@ -177,13 +177,18 @@ function getProjects() {
   try { return JSON.parse(localStorage.getItem('sfPrototypeProjects')) || {}; } catch { return {}; }
 }
 
+function profileNameFor(email, fallback = '') {
+  const normalized = String(email || '').toLowerCase();
+  return getUsers()[normalized]?.displayName || fallback || normalized;
+}
+
 function sessionFromUser(user) {
   if (!user) return null;
   const username = user.email.toLowerCase();
   return {
     userId: user.id,
     username,
-    displayName: user.user_metadata?.display_name || getUsers()[username]?.displayName || username.split('@')[0]
+    displayName: profileNameFor(username, user.user_metadata?.display_name || username.split('@')[0])
   };
 }
 
@@ -193,6 +198,7 @@ async function loadProfiles() {
   const users = {};
   for (const profile of data || []) users[profile.email.toLowerCase()] = { displayName: profile.display_name };
   localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
+  if (currentSession && users[currentSession.username]?.displayName) currentSession.displayName = users[currentSession.username].displayName;
 }
 
 async function loadRemoteProjects(session) {
@@ -988,7 +994,7 @@ function renderBookclubProject(project) {
       post.className = 'discussion-post';
       const meta = document.createElement('p');
       const author = document.createElement('strong');
-      author.textContent = comment.authorName || comment.authorEmail || 'Bookclub member';
+      author.textContent = profileNameFor(comment.authorEmail, comment.authorName || 'Bookclub member');
       const time = document.createElement('time');
       time.dateTime = comment.createdAt || '';
       time.textContent = comment.createdAt ? new Date(comment.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -1160,7 +1166,7 @@ function appendDiscussion(container, comments, emptyText, project, itemId) {
     post.className = 'discussion-post';
     const meta = document.createElement('p');
     const author = document.createElement('strong');
-    author.textContent = comment.authorName || comment.authorEmail || 'Memory Box member';
+    author.textContent = profileNameFor(comment.authorEmail, comment.authorName || 'Memory Box member');
     const time = document.createElement('time');
     time.dateTime = comment.createdAt || '';
     time.textContent = comment.createdAt ? new Date(comment.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -1438,7 +1444,7 @@ function renderCollectionProject(project) {
     const addedBy = document.createElement('p');
     addedBy.className = 'memory-added-by';
     const addedByEmail = item.addedByEmail || project.ownerEmail || '';
-    const addedByName = item.addedByName || getUsers()[addedByEmail]?.displayName || addedByEmail || 'Unknown member';
+    const addedByName = profileNameFor(addedByEmail, item.addedByName || 'Unknown member');
     addedBy.textContent = `Added by ${addedByName}`;
     heading.append(eyebrow, title, byline, addedBy);
     if (item.type === 'audiobook' && item.url) {
@@ -1825,6 +1831,7 @@ async function refreshActiveProject() {
   button.disabled = true;
   status.textContent = 'Checking for changes…';
   try {
+    await loadProfiles();
     const { data, error } = await supabaseClient
       .from('projects')
       .select('data, collaborator_emails')
@@ -1889,6 +1896,7 @@ function showProfile() {
   document.querySelector('#profile-avatar').textContent = initials;
   document.querySelector('#profile-display-name').textContent = session.displayName;
   document.querySelector('#profile-username').textContent = session.username;
+  closeProfileNameEditor();
   const stats = document.querySelector('#profile-stats');
   stats.replaceChildren();
   for (const [value, label] of [[projects.length, 'Creations'], [itemCount, 'Items & chapters']]) {
@@ -1908,6 +1916,56 @@ function showProfile() {
   libraryScreen.hidden = true;
   profileScreen.hidden = false;
   setActiveNav('profile');
+}
+
+function closeProfileNameEditor() {
+  document.querySelector('#profile-name-editor').hidden = true;
+  document.querySelector('#profile-display-name').hidden = false;
+  document.querySelector('#edit-profile-name').hidden = false;
+  document.querySelector('#profile-name-status').textContent = '';
+}
+
+function openProfileNameEditor() {
+  const session = getSession();
+  if (!session) return;
+  const input = document.querySelector('#profile-name-input');
+  input.value = session.displayName;
+  document.querySelector('#profile-display-name').hidden = true;
+  document.querySelector('#edit-profile-name').hidden = true;
+  document.querySelector('#profile-name-editor').hidden = false;
+  input.focus();
+  input.select();
+}
+
+async function saveProfileName(event) {
+  event.preventDefault();
+  const session = getSession();
+  if (!session) return;
+  const input = document.querySelector('#profile-name-input');
+  const status = document.querySelector('#profile-name-status');
+  const submit = document.querySelector('#save-profile-name');
+  const cancel = document.querySelector('#cancel-profile-name');
+  const displayName = input.value.trim();
+  if (!displayName) return input.focus();
+  submit.disabled = true;
+  cancel.disabled = true;
+  status.textContent = 'Saving…';
+  try {
+    const { error: profileError } = await supabaseClient.from('profiles').update({ display_name: displayName }).eq('id', session.userId);
+    if (profileError) throw profileError;
+    const { error: authError } = await supabaseClient.auth.updateUser({ data: { display_name: displayName } });
+    if (authError) throw authError;
+    const users = getUsers();
+    users[session.username] = { displayName };
+    localStorage.setItem('sfPrototypeUsers', JSON.stringify(users));
+    currentSession = { ...session, displayName };
+    updateProfileButton();
+    showProfile();
+  } catch (error) {
+    status.textContent = error.message || 'Your profile name could not be updated.';
+    submit.disabled = false;
+    cancel.disabled = false;
+  }
 }
 
 async function logout() {
@@ -2107,6 +2165,9 @@ document.querySelector('#view-profile-button').addEventListener('click', showPro
 document.querySelector('#logout-button').addEventListener('click', logout);
 document.querySelector('#profile-logout-button').addEventListener('click', logout);
 document.querySelector('#nav-profile-button').addEventListener('click', showProfile);
+document.querySelector('#edit-profile-name').addEventListener('click', openProfileNameEditor);
+document.querySelector('#profile-name-editor').addEventListener('submit', saveProfileName);
+document.querySelector('#cancel-profile-name').addEventListener('click', closeProfileNameEditor);
 document.querySelector('#profile-back-button').addEventListener('click', () => {
   showCreate();
 });

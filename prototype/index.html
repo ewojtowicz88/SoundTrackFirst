@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#171411">
-  <meta name="application-version" content="0.10.1">
+  <meta name="application-version" content="0.11.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -205,8 +205,14 @@
         <p class="eyebrow">Your account</p>
         <div class="profile-identity">
           <span class="profile-avatar" id="profile-avatar" aria-hidden="true"></span>
-          <div>
-            <h1 id="profile-display-name"></h1>
+          <div class="profile-copy">
+            <div class="profile-name-row"><h1 id="profile-display-name"></h1><button id="edit-profile-name" type="button" aria-label="Edit profile name">✎</button></div>
+            <form class="profile-name-editor" id="profile-name-editor" hidden>
+              <label for="profile-name-input">Profile name</label>
+              <input id="profile-name-input" type="text" maxlength="80" autocomplete="name" required>
+              <div><button id="save-profile-name" type="submit">Save</button><button id="cancel-profile-name" type="button">Cancel</button></div>
+              <p class="form-message" id="profile-name-status"></p>
+            </form>
             <p id="profile-username"></p>
           </div>
         </div>
