@@ -75,6 +75,7 @@ let pendingFormat = null;
 let resolvedSource = null;
 let memorySourceType = null;
 let memoryPhotoFile = null;
+let memoryPhotoLocationSuggestion = null;
 let activeProject = null;
 let spotifyIframeApi = null;
 let spotifyEmbedController = null;
@@ -503,6 +504,101 @@ function attributeMemoryItem(item, session = getSession()) {
     addedByName: item.addedByName || session.displayName,
     addedAt: item.addedAt || new Date().toISOString()
   };
+}
+
+function readExifGpsFromJpeg(buffer) {
+  const view = new DataView(buffer);
+  const length = view.byteLength;
+  if (length < 12 || view.getUint16(0, false) !== 0xffd8) return null;
+  const inBounds = (offset, size = 1) => offset >= 0 && offset + size <= length;
+  let segment = 2;
+  while (inBounds(segment, 4)) {
+    if (view.getUint8(segment) !== 0xff) { segment += 1; continue; }
+    const marker = view.getUint8(segment + 1);
+    if (marker === 0xda || marker === 0xd9) break;
+    const segmentLength = view.getUint16(segment + 2, false);
+    const payload = segment + 4;
+    if (marker === 0xe1 && segmentLength >= 8 && inBounds(payload, 6)
+      && view.getUint32(payload, false) === 0x45786966 && view.getUint16(payload + 4, false) === 0) {
+      const tiff = payload + 6;
+      if (!inBounds(tiff, 8)) return null;
+      const byteOrder = view.getUint16(tiff, false);
+      const little = byteOrder === 0x4949;
+      if (!little && byteOrder !== 0x4d4d) return null;
+      const get16 = offset => inBounds(offset, 2) ? view.getUint16(offset, little) : null;
+      const get32 = offset => inBounds(offset, 4) ? view.getUint32(offset, little) : null;
+      if (get16(tiff + 2) !== 42) return null;
+      const ifd0Offset = get32(tiff + 4);
+      if (ifd0Offset === null) return null;
+      const ifd0 = tiff + ifd0Offset;
+      const entries = get16(ifd0);
+      if (entries === null || !inBounds(ifd0 + 2, entries * 12)) return null;
+      let gpsOffset = null;
+      for (let index = 0; index < entries; index += 1) {
+        const entry = ifd0 + 2 + index * 12;
+        if (get16(entry) === 0x8825) { gpsOffset = get32(entry + 8); break; }
+      }
+      if (gpsOffset === null) return null;
+      const gpsIfd = tiff + gpsOffset;
+      const gpsEntries = get16(gpsIfd);
+      if (gpsEntries === null || !inBounds(gpsIfd + 2, gpsEntries * 12)) return null;
+      let latitudeRef = 'N';
+      let longitudeRef = 'E';
+      let latitude = null;
+      let longitude = null;
+      const readAscii = entry => {
+        const count = get32(entry + 4);
+        const start = count !== null && count <= 4 ? entry + 8 : tiff + (get32(entry + 8) || 0);
+        return inBounds(start) ? String.fromCharCode(view.getUint8(start)) : '';
+      };
+      const readCoordinate = entry => {
+        const offset = get32(entry + 8);
+        if (offset === null) return null;
+        const start = tiff + offset;
+        if (!inBounds(start, 24)) return null;
+        const values = [];
+        for (let part = 0; part < 3; part += 1) {
+          const numerator = get32(start + part * 8);
+          const denominator = get32(start + part * 8 + 4);
+          if (numerator === null || !denominator) return null;
+          values.push(numerator / denominator);
+        }
+        return values[0] + values[1] / 60 + values[2] / 3600;
+      };
+      for (let index = 0; index < gpsEntries; index += 1) {
+        const entry = gpsIfd + 2 + index * 12;
+        const tag = get16(entry);
+        if (tag === 1) latitudeRef = readAscii(entry) || latitudeRef;
+        if (tag === 2) latitude = readCoordinate(entry);
+        if (tag === 3) longitudeRef = readAscii(entry) || longitudeRef;
+        if (tag === 4) longitude = readCoordinate(entry);
+      }
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      if (latitudeRef.toUpperCase() === 'S') latitude *= -1;
+      if (longitudeRef.toUpperCase() === 'W') longitude *= -1;
+      return { latitude, longitude };
+    }
+    if (segmentLength < 2) break;
+    segment += 2 + segmentLength;
+  }
+  return null;
+}
+
+async function locationSuggestionFromPhoto(file) {
+  try {
+    const gps = readExifGpsFromJpeg(await file.arrayBuffer());
+    if (!gps) return null;
+    const latitude = Number(gps.latitude.toFixed(5));
+    const longitude = Number(gps.longitude.toFixed(5));
+    return {
+      latitude,
+      longitude,
+      label: `${latitude}, ${longitude}`,
+      mapUrl: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=15/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`
+    };
+  } catch {
+    return null;
+  }
 }
 
 function metObjectToCollectionItem(object) {
@@ -1110,6 +1206,20 @@ async function updateMemoryItemTitle(project, itemId, nextTitle) {
   await openProject(latest);
 }
 
+async function updateMemoryItemLocation(project, itemId, nextLocation) {
+  if (!canEditProjectContent(project)) throw new Error('Editor access is required to change a location.');
+  const latest = await latestRemoteProject(project);
+  const item = latest.memoryItems?.find(entry => entry.id === itemId);
+  if (!item) throw new Error('That item could not be found. Refresh and try again.');
+  item.location = nextLocation.trim();
+  latest.updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from('projects').update({ data: latest, updated_at: latest.updatedAt }).eq('id', latest.id);
+  if (error) throw error;
+  syncProject(latest);
+  activeProject = latest;
+  await openProject(latest);
+}
+
 async function attachSongToMemoryItem(project, itemId, spotifyUrl) {
   if (!canContribute(project)) throw new Error('Collaborator access is required to add a song.');
   const track = await importSpotifyTrack(spotifyUrl);
@@ -1400,8 +1510,10 @@ function renderCollectionProject(project) {
       return;
     }
     photoButton.disabled = true;
-    addStatus.textContent = 'Uploading photo…';
+    addStatus.textContent = 'Reading photo details…';
     try {
+      const locationSuggestion = await locationSuggestionFromPhoto(file);
+      addStatus.textContent = 'Uploading photo…';
       const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, '-');
       const path = `${project.id}/${crypto.randomUUID()}-${safeName}`;
       const { error } = await supabaseClient.storage.from('memory-box-images').upload(path, file, { contentType: file.type, upsert: false });
@@ -1413,6 +1525,7 @@ function renderCollectionProject(project) {
         title: photoTitle.value.trim() || file.name.replace(/\.[^.]+$/, ''),
         image: data.publicUrl,
         storagePath: path,
+        locationSuggestion,
         comments: []
       }]);
     } catch (error) {
@@ -1544,6 +1657,86 @@ function renderCollectionProject(project) {
     const top = document.createElement('div');
     top.className = 'memory-top';
     top.append(media, heading);
+    const locationArea = document.createElement('div');
+    locationArea.className = 'memory-location-area';
+    const locationDisplay = document.createElement('div');
+    locationDisplay.className = 'memory-location-display';
+    const locationText = document.createElement('span');
+    locationText.textContent = item.location ? `📍 ${item.location}` : 'No location added';
+    locationDisplay.append(locationText);
+    locationArea.append(locationDisplay);
+    if (canEditProjectContent(project)) {
+      const editLocation = document.createElement('button');
+      editLocation.type = 'button';
+      editLocation.className = 'memory-location-edit';
+      editLocation.textContent = item.location ? 'Edit location' : 'Add location';
+      locationDisplay.append(editLocation);
+      const locationForm = document.createElement('form');
+      locationForm.className = 'memory-location-form';
+      locationForm.hidden = true;
+      const locationInput = document.createElement('input');
+      locationInput.type = 'text';
+      locationInput.maxLength = 160;
+      locationInput.value = item.location || '';
+      locationInput.placeholder = 'City, venue, address, or coordinates';
+      locationInput.setAttribute('aria-label', `Location for ${item.title}`);
+      const saveLocation = document.createElement('button');
+      saveLocation.type = 'submit';
+      saveLocation.textContent = 'Save';
+      const cancelLocation = document.createElement('button');
+      cancelLocation.type = 'button';
+      cancelLocation.textContent = 'Cancel';
+      const locationStatus = document.createElement('p');
+      locationStatus.className = 'form-message memory-location-status';
+      locationForm.append(locationInput, saveLocation, cancelLocation, locationStatus);
+      if (!item.location && item.locationSuggestion?.label) {
+        const suggestion = document.createElement('div');
+        suggestion.className = 'memory-location-suggestion';
+        const suggestionText = document.createElement('span');
+        suggestionText.textContent = `Photo GPS suggests ${item.locationSuggestion.label}`;
+        const useSuggestion = document.createElement('button');
+        useSuggestion.type = 'button';
+        useSuggestion.textContent = 'Use suggestion';
+        useSuggestion.addEventListener('click', () => {
+          locationInput.value = item.locationSuggestion.label;
+          locationInput.focus();
+        });
+        suggestion.append(suggestionText, useSuggestion);
+        if (item.locationSuggestion.mapUrl) {
+          const mapLink = document.createElement('a');
+          mapLink.href = item.locationSuggestion.mapUrl;
+          mapLink.target = '_blank';
+          mapLink.rel = 'noopener';
+          mapLink.textContent = 'View map';
+          suggestion.append(mapLink);
+        }
+        locationForm.prepend(suggestion);
+      }
+      editLocation.addEventListener('click', () => {
+        locationDisplay.hidden = true;
+        locationForm.hidden = false;
+        locationInput.focus();
+        locationInput.select();
+      });
+      cancelLocation.addEventListener('click', () => {
+        locationForm.hidden = true;
+        locationDisplay.hidden = false;
+        locationStatus.textContent = '';
+      });
+      locationForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        saveLocation.disabled = true;
+        cancelLocation.disabled = true;
+        locationStatus.textContent = item.location && !locationInput.value.trim() ? 'Removing location…' : 'Saving location…';
+        try { await updateMemoryItemLocation(project, item.id, locationInput.value); }
+        catch (error) {
+          locationStatus.textContent = error.message || 'The location could not be saved.';
+          saveLocation.disabled = false;
+          cancelLocation.disabled = false;
+        }
+      });
+      locationArea.append(locationForm);
+    }
     const songArea = document.createElement('div');
     songArea.className = 'memory-attached-song-area';
     if (['photo', 'art'].includes(item.type) && item.attachedSong) {
@@ -1643,6 +1836,7 @@ function renderCollectionProject(project) {
     });
     composer.hidden = !canContribute(project);
     card.append(top);
+    card.append(locationArea);
     if (songArea.childElementCount) card.append(songArea);
     card.append(discussion, composer);
     sceneList.append(card);
@@ -1998,6 +2192,7 @@ function openFormat(name) {
   resolvedSource = null;
   memorySourceType = null;
   memoryPhotoFile = null;
+  memoryPhotoLocationSuggestion = null;
   selectedFormat.textContent = name;
   selectedBadge.innerHTML = format.icon;
   selectedBadge.parentElement.className = `selected-heading ${format.className}`;
@@ -2032,6 +2227,7 @@ function openFormat(name) {
 function chooseMemorySource(type) {
   memorySourceType = type;
   memoryPhotoFile = null;
+  memoryPhotoLocationSuggestion = null;
   resolvedSource = null;
   sourceUrl.value = '';
   memoryFirstPhoto.value = '';
@@ -2107,7 +2303,7 @@ artSearchQuery.addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); runSetupArtSearch(); }
 });
 
-memoryFirstPhoto.addEventListener('change', () => {
+memoryFirstPhoto.addEventListener('change', async () => {
   const file = memoryFirstPhoto.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) {
@@ -2116,13 +2312,17 @@ memoryFirstPhoto.addEventListener('change', () => {
     return;
   }
   memoryPhotoFile = file;
+  formMessage.textContent = 'Reading photo details…';
+  memoryPhotoLocationSuggestion = await locationSuggestionFromPhoto(file);
   const title = memoryFirstPhotoName.value.trim() || file.name.replace(/\.[^.]+$/, '');
   resolvedSource = { name: title, image: URL.createObjectURL(file), items: [] };
   document.querySelector('#memory-first-photo-file').textContent = file.name;
   document.querySelector('#preview-label').textContent = 'Photo';
   document.querySelector('#preview-title').textContent = title;
   document.querySelector('#preview-byline').textContent = 'Ready for your Memory Box';
-  document.querySelector('#preview-meta').textContent = 'You can add more photos, art, audiobooks, songs, and playlists next.';
+  document.querySelector('#preview-meta').textContent = memoryPhotoLocationSuggestion
+    ? `Photo GPS suggests ${memoryPhotoLocationSuggestion.label}. You can use or edit it after creating the Memory Box.`
+    : 'You can add more photos, art, audiobooks, songs, and playlists next.';
   const art = document.querySelector('#source-art');
   art.textContent = '';
   art.style.backgroundImage = `url("${resolvedSource.image}")`;
@@ -2131,6 +2331,7 @@ memoryFirstPhoto.addEventListener('change', () => {
   metadataPreview.hidden = false;
   nameStep.hidden = false;
   nameStep.querySelector('.primary-button').textContent = 'Create Memory Box';
+  formMessage.textContent = '';
 });
 
 memoryFirstPhotoName.addEventListener('input', () => {
@@ -2377,7 +2578,7 @@ document.querySelector('#create-item').addEventListener('click', async () => {
       if (error) throw error;
       const { data } = supabaseClient.storage.from('memory-box-images').getPublicUrl(path);
       const photoTitle = memoryFirstPhotoName.value.trim() || memoryPhotoFile.name.replace(/\.[^.]+$/, '');
-      project.memoryItems = [{ id: crypto.randomUUID(), type: 'photo', title: photoTitle, image: data.publicUrl, storagePath: path, comments: [] }];
+      project.memoryItems = [{ id: crypto.randomUUID(), type: 'photo', title: photoTitle, image: data.publicUrl, storagePath: path, locationSuggestion: memoryPhotoLocationSuggestion, comments: [] }];
       project.memoryCover = data.publicUrl;
       project.memorySourceName = photoTitle;
     } catch (error) {

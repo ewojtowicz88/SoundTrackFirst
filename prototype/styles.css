@@ -214,6 +214,17 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory-name-status { grid-column: 1 / -1; margin: 0; }
 .memory-play { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--gold); border-radius: 50%; background: transparent; color: var(--gold-bright); }
 .memory-play svg { width: 15px; height: 15px; margin-left: 2px; fill: currentColor; }
+.memory-location-area { padding: 10px 13px; border-bottom: 1px solid #3e362d; background: #1c1915; }
+.memory-location-display { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.memory-location-display span { min-width: 0; overflow-wrap: anywhere; color: var(--muted); font-size: 10px; }
+.memory-location-edit { flex: 0 0 auto; padding: 6px 8px; border: 1px solid #5a4938; border-radius: 7px; background: transparent; color: var(--gold-bright); font-size: 8px; font-weight: 700; }
+.memory-location-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
+.memory-location-form[hidden] { display: none; }
+.memory-location-form input { min-width: 0; padding: 9px 10px; border: 1px solid #55483a; border-radius: 8px; background: #12100e; color: var(--foreground); }
+.memory-location-form > button { padding: 8px 9px; border: 1px solid #5a4938; border-radius: 7px; background: transparent; color: var(--gold-bright); font-size: 8px; font-weight: 700; }
+.memory-location-suggestion { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 8px; border: 1px solid #3f5d48; border-radius: 8px; background: #162019; color: #b8cfbe; font-size: 9px; }
+.memory-location-suggestion button, .memory-location-suggestion a { padding: 0; border: 0; background: none; color: var(--spotify); font-size: 9px; font-weight: 700; text-decoration: underline; }
+.memory-location-status { grid-column: 1 / -1; margin: 0; }
 .memory-attached-song-area { display: grid; grid-template-columns: 54px minmax(0, 1fr) 36px; align-items: center; gap: 11px; padding: 12px 13px; border-bottom: 1px solid #3e362d; background: #191612; }
 .memory-attached-song-area > img { width: 54px; height: 54px; border-radius: 7px; object-fit: cover; }
 .memory-attached-song-area small { display: block; margin-bottom: 4px; color: var(--spotify); font-size: 8px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
@@ -231,6 +242,8 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory-song-status { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 370px) {
   .memory-add-row, .memory-top { grid-template-columns: 1fr; }
+  .memory-location-form { grid-template-columns: 1fr 1fr; }
+  .memory-location-form input { grid-column: 1 / -1; }
   .memory-add-row button { width: 100%; }
   .memory-media { width: 100%; height: auto; aspect-ratio: 1; }
 }
