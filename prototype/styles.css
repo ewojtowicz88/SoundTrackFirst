@@ -225,7 +225,7 @@ h1 { margin: 10px 0 13px; font: 400 clamp(2.65rem, 11vw, 3.55rem)/1.06 "Libre Ba
 .memory-location-suggestion { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 8px; border: 1px solid #3f5d48; border-radius: 8px; background: #162019; color: #b8cfbe; font-size: 9px; }
 .memory-location-suggestion button, .memory-location-suggestion a { padding: 0; border: 0; background: none; color: var(--spotify); font-size: 9px; font-weight: 700; text-decoration: underline; }
 .memory-location-status { grid-column: 1 / -1; margin: 0; }
-.memory-attached-song-area { display: grid; grid-template-columns: 54px minmax(0, 1fr) 36px; align-items: center; gap: 11px; padding: 12px 13px; border-bottom: 1px solid #3e362d; background: #191612; }
+.memory-attached-song-area { display: grid; grid-template-columns: 54px minmax(0, 1fr) 36px; align-items: center; gap: 11px; padding: 12px 13px; border-top: 1px solid #3e362d; background: #191612; }
 .memory-attached-song-area > img { width: 54px; height: 54px; border-radius: 7px; object-fit: cover; }
 .memory-attached-song-area small { display: block; margin-bottom: 4px; color: var(--spotify); font-size: 8px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
 .memory-attached-song-area a { display: block; overflow: hidden; color: var(--foreground); font: 400 12px/1.3 "Libre Baskerville", Georgia, serif; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }

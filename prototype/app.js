@@ -1837,8 +1837,8 @@ function renderCollectionProject(project) {
     composer.hidden = !canContribute(project);
     card.append(top);
     card.append(locationArea);
-    if (songArea.childElementCount) card.append(songArea);
     card.append(discussion, composer);
+    if (songArea.childElementCount) card.append(songArea);
     sceneList.append(card);
   });
 }
