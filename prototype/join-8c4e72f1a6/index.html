@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171411">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <title>Join Soundtrack First</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="register.css">
+</head>
+<body>
+  <main class="registration-shell">
+    <img class="wordmark" src="../assets/soundtrack-first-logo.png" alt="Soundtrack First">
+    <p class="eyebrow">Private invitation</p>
+    <h1>Create your account</h1>
+    <p class="intro">Use the invitation link you received to join Soundtrack First and begin creating together.</p>
+
+    <form id="registration-form">
+      <label for="display-name">Profile name</label>
+      <input id="display-name" type="text" maxlength="80" autocomplete="name" placeholder="How should your name appear?" required>
+
+      <label for="email">Email address</label>
+      <input id="email" type="email" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="you@example.com" required>
+
+      <label for="password">Password</label>
+      <input id="password" type="password" minlength="6" autocomplete="new-password" placeholder="At least 6 characters" required>
+
+      <label for="confirm-password">Confirm password</label>
+      <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
+
+      <button id="register-button" type="submit">Create account</button>
+      <p class="status" id="registration-status" role="alert"></p>
+    </form>
+
+    <section class="success" id="registration-success" hidden>
+      <p class="eyebrow">Welcome</p>
+      <h2>Your account is ready.</h2>
+      <p>You can now log in and begin creating.</p>
+      <a href="../">Open Soundtrack First</a>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="register.js"></script>
+</body>
+</html>

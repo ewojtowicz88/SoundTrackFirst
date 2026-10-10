@@ -1,0 +1,37 @@
+:root {
+  color-scheme: dark;
+  font: 16px/1.5 "DM Sans", Arial, sans-serif;
+  --background: #171411;
+  --surface: #211d19;
+  --foreground: #f4eee5;
+  --muted: #aaa196;
+  --border: #504638;
+  --gold: #c9a16a;
+  --gold-bright: #e2ba7d;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; background: #0d0b0a; }
+body { display: grid; place-items: center; padding: 20px; color: var(--foreground); }
+button, input { font: inherit; }
+[hidden] { display: none !important; }
+
+.registration-shell { width: min(100%, 460px); padding: 28px 24px calc(32px + env(safe-area-inset-bottom)); border: 1px solid #3c342c; border-radius: 28px; background: radial-gradient(circle at 85% 5%, #6b4c2726, transparent 31%), var(--background); box-shadow: 0 28px 80px #000b; }
+.wordmark { display: block; width: auto; max-width: 225px; max-height: 48px; margin-bottom: 44px; object-fit: contain; }
+.eyebrow { margin: 0; color: var(--gold); font-size: 10px; font-weight: 700; letter-spacing: .19em; text-transform: uppercase; }
+h1 { margin: 9px 0 12px; font: 400 clamp(2.5rem, 11vw, 3.4rem)/1.05 "Libre Baskerville", Georgia, serif; letter-spacing: -.06em; }
+.intro { margin: 0 0 28px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+form label { display: block; margin: 14px 0 7px; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+form input { width: 100%; padding: 13px 14px; border: 1px solid var(--border); border-radius: 11px; background: #12100e; color: var(--foreground); }
+form input:focus { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+form button, .success a { display: block; width: 100%; margin-top: 22px; padding: 14px 16px; border: 1px solid var(--gold); border-radius: 24px; background: var(--gold); color: #1d1915; font-size: 11px; font-weight: 700; letter-spacing: .11em; text-align: center; text-decoration: none; text-transform: uppercase; }
+form button:disabled { cursor: wait; opacity: .65; }
+.status { min-height: 19px; margin: 10px 2px 0; color: #e6a499; font-size: 11px; }
+.success { margin-top: 20px; padding: 22px; border: 1px solid #4e684f; border-radius: 16px; background: #172019; }
+.success h2 { margin: 8px 0 8px; font: 400 25px/1.2 "Libre Baskerville", Georgia, serif; }
+.success p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 520px) {
+  body { display: block; padding: 0; }
+  .registration-shell { min-height: 100dvh; border: 0; border-radius: 0; }
+}
