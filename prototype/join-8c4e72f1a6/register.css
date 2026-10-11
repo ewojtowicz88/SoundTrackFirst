@@ -13,7 +13,7 @@
 * { box-sizing: border-box; }
 html, body { min-height: 100%; margin: 0; background: #0d0b0a; }
 body { display: grid; place-items: center; padding: 20px; color: var(--foreground); }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 [hidden] { display: none !important; }
 
 .registration-shell { width: min(100%, 460px); padding: 28px 24px calc(32px + env(safe-area-inset-bottom)); border: 1px solid #3c342c; border-radius: 28px; background: radial-gradient(circle at 85% 5%, #6b4c2726, transparent 31%), var(--background); box-shadow: 0 28px 80px #000b; }
@@ -22,8 +22,17 @@ button, input { font: inherit; }
 h1 { margin: 9px 0 12px; font: 400 clamp(2.5rem, 11vw, 3.4rem)/1.05 "Libre Baskerville", Georgia, serif; letter-spacing: -.06em; }
 .intro { margin: 0 0 28px; color: var(--muted); font-size: 13px; line-height: 1.65; }
 form label { display: block; margin: 14px 0 7px; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
-form input { width: 100%; padding: 13px 14px; border: 1px solid var(--border); border-radius: 11px; background: #12100e; color: var(--foreground); }
-form input:focus { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+form input, form select { width: 100%; padding: 13px 14px; border: 1px solid var(--border); border-radius: 11px; background: #12100e; color: var(--foreground); }
+form input:focus, form select:focus, .terms summary:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.terms { margin-top: 22px; border: 1px solid var(--border); border-radius: 13px; background: #12100e; }
+.terms summary { padding: 14px 16px; color: var(--gold-bright); cursor: pointer; font-size: 12px; font-weight: 700; }
+.terms-copy { max-height: 320px; overflow-y: auto; padding: 0 16px 16px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.terms-copy h2 { margin: 8px 0; color: var(--foreground); font: 700 14px/1.4 "DM Sans", Arial, sans-serif; }
+.terms-copy h3 { margin: 20px 0 6px; color: var(--gold); font-size: 12px; }
+.terms-copy p { margin: 7px 0; }
+.terms-copy a { color: var(--gold-bright); }
+form label.terms-consent { display: flex; align-items: flex-start; gap: 10px; margin: 18px 2px 0; color: var(--foreground); font-size: 12px; font-weight: 500; letter-spacing: 0; line-height: 1.45; text-transform: none; }
+.terms-consent input { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
 form button, .success a { display: block; width: 100%; margin-top: 22px; padding: 14px 16px; border: 1px solid var(--gold); border-radius: 24px; background: var(--gold); color: #1d1915; font-size: 11px; font-weight: 700; letter-spacing: .11em; text-align: center; text-decoration: none; text-transform: uppercase; }
 form button:disabled { cursor: wait; opacity: .65; }
 .status { min-height: 19px; margin: 10px 2px 0; color: #e6a499; font-size: 11px; }

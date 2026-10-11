@@ -31,6 +31,65 @@
       <label for="confirm-password">Confirm password</label>
       <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
 
+      <label for="referral-source">How did you hear about us?</label>
+      <select id="referral-source" required>
+        <option value="" selected disabled>Select one</option>
+        <option value="TPD">TPD</option>
+        <option value="EJW">EJW</option>
+        <option value="Internet search">Internet search</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <div id="referral-other-wrap" hidden>
+        <label for="referral-other">Please tell us how</label>
+        <input id="referral-other" type="text" minlength="5" maxlength="120" placeholder="At least 5 characters">
+      </div>
+
+      <details class="terms">
+        <summary>Read the Alpha Terms of Use</summary>
+        <div class="terms-copy">
+          <h2>SOUNDTRACK FIRST — ALPHA TERMS OF USE</h2>
+          <p><strong>Alpha Version <span id="terms-version"></span> — Friends &amp; Family Testing</strong></p>
+          <p>Soundtrack First is currently an early-stage alpha product provided solely for testing, evaluation, and feedback. By accessing or using the application, you agree to these Alpha Terms of Use.</p>
+
+          <h3>1. Testing Environment</h3>
+          <p>Soundtrack First is a proof-of-concept and is not a finished commercial product. Features may be incomplete, experimental, unavailable, changed, or removed at any time.</p>
+          <p>The application may be refreshed, reset, updated, or rebuilt without notice. Content, contributions, uploads, drafts, playlists, stories, comments, settings, and other information you enter may be modified or permanently deleted.</p>
+          <p>Do not use Soundtrack First as the only place you store important work. You are responsible for keeping your own copies of anything you wish to preserve.</p>
+
+          <h3>2. Limited Privacy During Alpha Testing</h3>
+          <p>This Alpha environment is intended for product testing, not for confidential or sensitive information.</p>
+          <p>Privacy, security, data-retention, and access controls may be more limited than those of a finished commercial service. Information submitted through the Alpha may be accessed or reviewed by Soundtrack First personnel, developers, contractors, or service providers as reasonably necessary to operate, troubleshoot, evaluate, and improve the product.</p>
+          <p>Do not submit confidential, highly sensitive, financial, medical, legally privileged, or other information you would not want used in a testing environment.</p>
+
+          <h3>3. Testing and Feedback Only</h3>
+          <p>Access is being provided for evaluation and feedback purposes. You may report bugs, usability issues, ideas, observations, and other feedback to:</p>
+          <p><a href="mailto:soundtrackfirst@gmail.com">soundtrackfirst@gmail.com</a></p>
+          <p>You understand that feedback you voluntarily provide may be used by Soundtrack First without restriction or obligation to compensate you.</p>
+
+          <h3>4. No Warranty</h3>
+          <p>The Alpha is provided “AS IS” and “AS AVAILABLE,” without warranties of any kind, express or implied.</p>
+          <p>Soundtrack First does not warrant that the application will operate without interruption, errors, data loss, security issues, or other defects.</p>
+
+          <h3>5. Limitation of Liability</h3>
+          <p>To the fullest extent permitted by applicable law, Soundtrack First and its founders, owners, affiliates, employees, developers, contractors, and representatives will not be liable for any loss, damage, claim, expense, lost data, lost work, lost opportunity, or other consequence arising from or related to your access to or use of the Alpha.</p>
+          <p>You assume the risks associated with using experimental and pre-release software.</p>
+
+          <h3>6. Indemnification and Hold Harmless</h3>
+          <p>To the fullest extent permitted by applicable law, you agree to indemnify, defend, and hold harmless Soundtrack First and its founders, owners, affiliates, employees, developers, contractors, and representatives from claims, liabilities, damages, losses, costs, or expenses arising from your use or misuse of the Alpha, your submitted content, or your violation of these Terms or applicable law.</p>
+
+          <h3>7. Changes and Termination</h3>
+          <p>Soundtrack First may modify, suspend, reset, restrict, or discontinue the Alpha or your access to it at any time and without notice.</p>
+          <p>These Terms may also be updated as the product develops.</p>
+          <p>By continuing to access or use the Soundtrack First Alpha, you acknowledge that you understand and accept these Terms.</p>
+        </div>
+      </details>
+
+      <label class="terms-consent" for="terms-agreement">
+        <input id="terms-agreement" type="checkbox" required>
+        <span>I have read and agree to the Alpha Terms of Use.</span>
+      </label>
+
       <button id="register-button" type="submit">Create account</button>
       <p class="status" id="registration-status" role="alert"></p>
     </form>
@@ -44,6 +103,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../version.js"></script>
   <script src="register.js"></script>
 </body>
 </html>
