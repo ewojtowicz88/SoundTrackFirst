@@ -15,8 +15,22 @@ create table if not exists public.projects (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.registration_acceptances (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  referral_source text not null check (referral_source in ('TPD', 'EJW', 'Internet search', 'Other')),
+  referral_other text,
+  terms_version text not null,
+  accepted_at timestamptz not null,
+  recorded_at timestamptz not null default now(),
+  check (
+    (referral_source = 'Other' and length(trim(referral_other)) >= 5)
+    or (referral_source <> 'Other' and referral_other is null)
+  )
+);
+
 alter table public.profiles enable row level security;
 alter table public.projects enable row level security;
+alter table public.registration_acceptances enable row level security;
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -33,6 +47,24 @@ begin
   on conflict (id) do update set
     email = excluded.email,
     display_name = excluded.display_name;
+
+  if new.raw_user_meta_data ? 'terms_accepted_at' then
+    insert into public.registration_acceptances (
+      user_id,
+      referral_source,
+      referral_other,
+      terms_version,
+      accepted_at
+    )
+    values (
+      new.id,
+      new.raw_user_meta_data ->> 'referral_source',
+      nullif(new.raw_user_meta_data ->> 'referral_other', ''),
+      new.raw_user_meta_data ->> 'terms_version',
+      (new.raw_user_meta_data ->> 'terms_accepted_at')::timestamptz
+    )
+    on conflict (user_id) do nothing;
+  end if;
   return new;
 end;
 $$;
@@ -106,5 +138,11 @@ create policy "Only owners can delete projects"
   on public.projects for delete to authenticated
   using (owner_id = auth.uid());
 
+drop policy if exists "Public acceptance export" on public.registration_acceptances;
+create policy "Public acceptance export"
+  on public.registration_acceptances for select to anon, authenticated
+  using (true);
+
 grant select, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.projects to authenticated;
+grant select on public.registration_acceptances to anon, authenticated;

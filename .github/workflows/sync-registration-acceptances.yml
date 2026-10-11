@@ -1,0 +1,43 @@
+name: Sync registration acceptances
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: registration-acceptance-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Export acceptance records
+        env:
+          SUPABASE_ANON_KEY: sb_publishable_fwdFBHZCOg8UZKcmpwR7xQ_GH6ELFtJ
+        run: |
+          mkdir -p registration-data
+          curl --fail --silent --show-error \
+            'https://yjawkdddxcwwvipdjddy.supabase.co/rest/v1/registration_acceptances?select=user_id,referral_source,referral_other,terms_version,accepted_at&order=accepted_at.asc' \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            | jq --sort-keys '.' > registration-data/acceptances.json
+
+      - name: Commit updated file
+        run: |
+          if git diff --quiet -- registration-data/acceptances.json; then
+            echo "No acceptance changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add registration-data/acceptances.json
+          git commit -m "Sync registration acceptance records"
+          git push origin HEAD:main
